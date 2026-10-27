@@ -52,7 +52,6 @@ pub use self::backpropagation_strategy::BackpropagationStrategy;
 pub use self::search_strategy::SearchStrategy;
 pub use self::time_manager_strategy::TimeManagerStrategy;
 
-use crate::engine::logger::{LoggerTrait, NoLogger};
 use crate::engine::strategy_params::StrategyParams;
 
 pub struct Unspecified;
@@ -85,6 +84,5 @@ crate::define_engine_config! {
         Backpropagation: BackpropagationStrategy | backpropagation | Unspecified,
         Search:          SearchStrategy        | search          | Unspecified,
         TimeManager:     TimeManagerStrategy   | time_manager    | Unspecified,
-        Logger:          LoggerTrait           | logger          | NoLogger,
     }
 }

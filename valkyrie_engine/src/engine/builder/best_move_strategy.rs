@@ -39,5 +39,5 @@ use crate::prelude::*;
 crate::register_strategy!(max_q);
 
 pub trait BestMoveStrategy<C: EngineConfig>: Strategy {
-    fn execute(node_idx: NodeIndex, line_idx: usize, params: &Self::Params, engine: &Engine<C>) -> (Move, i32);
+    fn execute(node: &C::Node, line_idx: usize, params: &Self::Params, engine: &Engine<C>) -> Option<EdgeIndex>;
 }

@@ -35,11 +35,12 @@
 */
 
 use crate::{
-    engine::{
-        builder::exploration_strategy::VisitDistribution, 
-        tree::components::{HasPolicy, HasQ, HasVisits}
-    }, 
-    prelude::*
+    engine::tree::components::{
+        HasPolicy,
+        HasQ,
+        HasVisits,
+    },
+    prelude::*,
 };
 
 #[derive(Debug)]
@@ -62,16 +63,8 @@ where
     C::Node: HasVisits,
     C::Edge: HasVisits + HasPolicy + HasQ,
 {
-    fn execute(
-        distribution: &mut VisitDistribution,
-        node: &<C as EngineConfig>::Node,
-        _budget: u64,
-        params: &Self::Params,
-        _engine: &Engine<C>,
-    ) {
+    fn execute(node: &C::Node, params: &Self::Params, _engine: &Engine<C>) -> EdgeIndex {
         assert!(node.edge_count() > 0);
-
-        distribution.clear();
 
         let cpuct = cpuct::<C>(node, params);
         let parent_visits = node.visits();
@@ -94,12 +87,12 @@ where
             if puct > best_puct {
                 best_puct = puct;
                 edge_idx = idx;
-            } 
+            }
         }
 
         assert_ne!(edge_idx, usize::MAX);
 
-        distribution.push(edge_idx, 1);
+        EdgeIndex::new(edge_idx)
     }
 }
 

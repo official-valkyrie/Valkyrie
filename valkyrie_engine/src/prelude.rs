@@ -43,11 +43,11 @@ pub use crate::engine::builder::{
 };
 
 pub use crate::engine::{
-    EmptyParams, LoggerTrait, NoLogger, OptionError, SearchLimits, SearchStats, StrategyParams,
+    EmptyParams, NoReporter, OptionError, Reporter, SearchLimits, SearchStats, StrategyParams,
     UciOptionType,
 };
 
-pub use crate::engine::tree::{AtomicNodeIndex, EdgesStore, NodeIndex, Tree};
+pub use crate::engine::tree::{AtomicNodeIndex, EdgeIndex, EdgesStore, NodeIndex, Pv, Tree};
 
 pub use crate::engine::tree::components::{EdgeType, HasComponent, NodeType};
 

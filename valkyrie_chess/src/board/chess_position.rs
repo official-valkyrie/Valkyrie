@@ -35,6 +35,7 @@
 */
 
 use crate::{
+    GameState,
     Move,
     board::{chess_board::ChessBoard, move_history::MoveHistory},
 };
@@ -76,6 +77,35 @@ impl ChessPosition {
         }
 
         self.history.push(self.board.hash())
+    }
+
+    pub fn game_state(&self, root: &ChessPosition) -> GameState {
+        if !self.board.has_legal_moves() {
+            return if self.board.is_in_check() {
+                GameState::Lost(0)
+            } else {
+                GameState::Drew
+            };
+        }
+
+        if self.board.is_fifty_move_rule() || self.board.is_insufficient_material() {
+            return GameState::Drew;
+        }
+
+        let key = self.board.hash();
+        let root_repetitions = root.history.get_repetitions(key);
+        let search_repetitions = self.history.get_repetitions(key) - root_repetitions;
+
+        if root_repetitions >= 3 || search_repetitions >= 2 || root_repetitions + search_repetitions >= 3 {
+            GameState::Drew
+        } else {
+            GameState::Ongoing
+        }
+    }
+
+    #[inline]
+    pub fn is_draw(&self, root: &ChessPosition) -> bool {
+        self.game_state(root) == GameState::Drew
     }
 }
 

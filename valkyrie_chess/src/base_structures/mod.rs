@@ -37,6 +37,8 @@
 mod bitboard;
 mod castle_rights;
 mod fen;
+mod fen_validation;
+mod game_state;
 mod r#move;
 mod piece;
 mod side;
@@ -46,6 +48,8 @@ mod zobrist_key;
 pub use bitboard::Bitboard;
 pub use castle_rights::CastleRights;
 pub use fen::FEN;
+pub use fen_validation::FenViolation;
+pub use game_state::GameState;
 pub use r#move::Move;
 pub use r#move::MoveFlag;
 pub use piece::Piece;

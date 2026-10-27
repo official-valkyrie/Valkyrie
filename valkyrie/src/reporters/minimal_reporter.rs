@@ -34,59 +34,31 @@
     documentation.
 */
 
-use std::marker::PhantomData;
-
-use crate::{
-    engine::{builder::exploration_strategy::VisitDistribution, tree::components::HasVisits}, prelude::*,
+use valkyrie_engine::{
+    engine::tree::components::{
+        HasQ,
+        HasVisits,
+    },
+    prelude::*,
 };
 
-#[deprecated(note = "LazyBatch is development module to test single selection formulas a batch selectors. It assumes total virtual loss and was not made with multithreading in mind.")]
-#[derive(Debug)]
-pub struct LazyBatch<S>(PhantomData<S>);
+use crate::reporters::uci_reporter::UciReporter;
 
-#[allow(deprecated)]
-impl<S: Strategy> Strategy for LazyBatch<S> {
-    type Params = S::Params;
-}
+#[allow(dead_code)]
+#[derive(Debug, Default)]
+pub struct MinimalReporter;
 
-#[allow(deprecated)]
-impl<C, S> ExplorationStrategy<C> for LazyBatch<S>
+impl<C: EngineConfig> Reporter<C> for MinimalReporter
 where
-    C: EngineConfig,
-    S: ExplorationStrategy<C>,
+    C::BestMove: BestMoveStrategy<C>,
     C::Node: HasVisits,
-    C::Edge: HasVisits
+    C::Edge: HasQ + HasVisits,
 {
-    fn execute(
-        distribution: &mut VisitDistribution,
-        node: &<C as EngineConfig>::Node,
-        budget: u64,
-        params: &Self::Params,
-        engine: &Engine<C>,
-    ) {
-        assert!(node.edge_count() > 0);
+    fn search_ended(&self, stats: &SearchStats, engine: &Engine<C>) {
+        UciReporter::print_report(stats, engine);
+    }
 
-        distribution.clear();
-
-        let node_clone = node.clone();
-
-        let mut counts = vec![0u64; node_clone.edge_count()];
-        let mut step_distribution = VisitDistribution::new();
-
-        for _ in 0..budget {
-            S::execute(&mut step_distribution, &node_clone, 1, params, engine);
-
-            let step = step_distribution.as_slice()[0];
-            let edge_idx = step.edge_index();
-            counts[edge_idx] += step.vists();
-            node_clone.add_visit();
-            node_clone.edges()[edge_idx].add_visit();
-        }
-
-        for (idx, &visits) in counts.iter().enumerate() {
-            if visits > 0 {
-                distribution.push(idx, visits);
-            }
-        }
+    fn best_move(&self, mv: Move, engine: &Engine<C>) {
+        UciReporter::print_best_move(mv, engine);
     }
 }

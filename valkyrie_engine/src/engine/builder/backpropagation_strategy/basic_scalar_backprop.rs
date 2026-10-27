@@ -56,20 +56,20 @@ where
     C::Node: HasVisits
 {
     fn execute(
-        payload: &<C::Simulation as SimulationStrategy<C>>::Output,
+        payload: <C::Simulation as SimulationStrategy<C>>::Output,
         node: &C::Node,
-        edge_idx: Option<usize>,
+        edge_idx: Option<EdgeIndex>,
         _params: &Self::Params,
         _engine: &Engine<C>,
-    ) {
+    ) -> <C::Simulation as SimulationStrategy<C>>::Output {
         node.add_visit();
 
-        let Some(edge_idx) = edge_idx else {
-            return;
-        };
+        if let Some(edge_idx) = edge_idx {
+            let edges = node.edges();
+            edges[edge_idx].add_visit();
+            edges[edge_idx].add_score(f64::from(payload.as_scalar()));
+        }
 
-        let edges = node.edges();
-        edges[edge_idx].add_visit();
-        edges[edge_idx].add_score(f64::from(payload.as_scalar()));
+        payload
     }
 }

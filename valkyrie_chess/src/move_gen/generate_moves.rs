@@ -64,6 +64,15 @@ impl ChessBoard {
     }
 
     #[inline]
+    pub fn has_legal_moves(&self) -> bool {
+        if self.side() == Side::WHITE {
+            self.count_legal_moves::<WHITE>() > 0
+        } else {
+            self.count_legal_moves::<BLACK>() > 0
+        }
+    }
+
+    #[inline]
     pub fn map_capture_moves<F: FnMut(Move)>(&self, mut apply_move: F) {
         if self.side() == Side::WHITE {
             self.map_legal_moves_internal::<_, WHITE, true>(&mut apply_move)

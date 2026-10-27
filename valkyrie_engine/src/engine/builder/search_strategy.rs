@@ -39,5 +39,5 @@ use crate::prelude::*;
 crate::register_strategy!(basic_sequential_mcts);
 
 pub trait SearchStrategy<C: EngineConfig>: Strategy {
-    fn execute(limits: &SearchLimits, params: &Self::Params, engine: &Engine<C>) -> SearchStats;
+    fn execute(limits: &SearchLimits, params: &Self::Params, engine: &Engine<C>) -> (Move, SearchStats);
 }

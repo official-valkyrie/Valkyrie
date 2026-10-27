@@ -52,7 +52,6 @@ impl UciProcessor {
     ) -> bool
     where
         C::Search: SearchStrategy<C>,
-        C::Logger: LoggerTrait<C>,
     {
         let tokens: Vec<&str> = cmd.split_whitespace().collect();
 
@@ -104,8 +103,11 @@ impl UciProcessor {
             return;
         };
 
-        if !FEN::validate_fen(&fen) {
-            println!("info string Provided FEN is invalid");
+        let violations = FEN::validate_fen(&fen);
+        if !violations.is_empty() {
+            for violation in violations {
+                println!("info string Invalid FEN: {violation}");
+            }
             return;
         }
 
@@ -116,8 +118,8 @@ impl UciProcessor {
             for &mv_str in &args[idx..] {
                 let mut legal_move = false;
                 chess_position.board().clone().map_legal_moves(|legal_mv| {
-                    legal_move = mv_str == legal_mv.to_string(engine.params().general().chess960());
-                    if legal_move {
+                    if mv_str == legal_mv.to_string(engine.params().general().chess960()) {
+                        legal_move = true;
                         chess_position.make_move_no_mask(legal_mv);
                     }
                 });
@@ -192,23 +194,19 @@ impl UciProcessor {
         shutdown_token: &AtomicBool,
     ) where
         C::Search: SearchStrategy<C>,
-        C::Logger: LoggerTrait<C>,
     {
         let limits = args_to_search_limits(args, engine.position().board().side());
 
         engine.tree_mut().clear();
-        engine.set_interruption_token(false);
 
         std::thread::scope(|s| {
-            s.spawn(|| {
-                engine.search(&limits);
-            });
+            let search = engine.spawn_search(s, &limits);
 
-            while !engine.interruption_token() {
+            while !search.is_finished() {
                 let cmd = match input_wrapper.get_input_no_queue() {
                     Some(cmd) => cmd,
                     None => {
-                        engine.set_interruption_token(true);
+                        engine.stop();
                         shutdown_token.store(true, Ordering::Relaxed);
                         break;
                     }
@@ -216,10 +214,14 @@ impl UciProcessor {
 
                 match cmd.trim() {
                     "isready" => println!("readyok"),
-                    "stop" | "s" => engine.set_interruption_token(true),
+                    "stop" | "s" => {
+                        engine.stop();
+                        break;
+                    }
                     "quit" | "q" => {
-                        engine.set_interruption_token(true);
+                        engine.stop();
                         shutdown_token.store(true, Ordering::Relaxed);
+                        break;
                     }
                     _ => input_wrapper.push_back(cmd),
                 }

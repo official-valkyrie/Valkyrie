@@ -39,31 +39,55 @@ mod macros;
 pub mod builder;
 pub mod tree;
 
-mod logger;
+mod reporter;
 mod search_limits;
+mod search_state;
 mod search_stats;
 mod strategy_params;
 mod policy_entry;
 
 pub use builder::{EngineBuilder, EngineConfig, EngineParams, GeneralParams, SearchStrategy};
-pub use logger::{LoggerTrait, NoLogger};
+pub use reporter::{
+    NoReporter,
+    Reporter,
+};
 pub use search_limits::SearchLimits;
 pub use search_stats::SearchStats;
 pub use strategy_params::{EmptyParams, OptionError, StrategyParams, UciOptionType};
 
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
+use std::{
+    thread::{
+        Scope,
+        ScopedJoinHandle,
+    },
+    time::Duration,
+};
 
-use valkyrie_chess::ChessPosition;
+use valkyrie_chess::{
+    ChessPosition,
+    Move,
+};
 
-use crate::engine::tree::Tree;
+use crate::engine::{
+    builder::TimeManagerStrategy,
+    search_state::{
+        AtomicSearchState,
+        SearchState,
+    },
+    tree::Tree,
+};
+
+const HARD_LIMIT_CHECK_THRESHOLD: u64 = 128;
+const SOFT_LIMIT_CHECK_THRESHOLD: u64 = 4096;
+const STOP_POLL_INTERVAL: Duration = Duration::from_millis(1);
 
 #[derive(Debug)]
 pub struct Engine<C: EngineConfig> {
     params: EngineParams<C>,
     position: ChessPosition,
-    interruption_token: AtomicBool,
+    search_state: AtomicSearchState,
     tree: Tree<C::Node>,
+    reporter: Box<dyn Reporter<C>>,
 }
 
 impl<C: EngineConfig> Engine<C> {
@@ -98,27 +122,138 @@ impl<C: EngineConfig> Engine<C> {
     }
 
     #[inline]
-    pub fn interruption_token(&self) -> bool {
-        self.interruption_token.load(Ordering::Relaxed)
+    pub fn reported_nodes(&self, stats: &SearchStats) -> u64 {
+        if self.params.general().iters_as_nodes() {
+            stats.iterations()
+        } else {
+            stats.cumulative_depth()
+        }
     }
 
     #[inline]
-    pub fn set_interruption_token(&self, value: bool) {
-        self.interruption_token.store(value, Ordering::Relaxed)
+    pub fn stop(&self) {
+        self.search_state.transition(SearchState::Running, SearchState::Interrupted);
+        self.search_state.transition(SearchState::Ended, SearchState::Interrupted);
+    }
+
+    #[inline]
+    pub fn is_running(&self) -> bool {
+        self.search_state.is(SearchState::Running)
+    }
+
+    #[inline]
+    pub fn is_ended(&self) -> bool {
+        self.search_state.is(SearchState::Ended)
+    }
+
+    #[inline]
+    pub fn is_interrupted(&self) -> bool {
+        self.search_state.is(SearchState::Interrupted)
+    }
+
+    #[inline]
+    pub fn is_stopped(&self) -> bool {
+        !self.is_running()
+    }
+
+    #[inline]
+    pub fn reporter(&self) -> &dyn Reporter<C> {
+        self.reporter.as_ref()
+    }
+
+    pub fn set_reporter(&mut self, reporter: impl Reporter<C> + 'static) {
+        self.reporter = Box::new(reporter);
+    }
+
+    #[inline]
+    pub fn print(&self, msg: &str) {
+        self.reporter.print(msg)
     }
 }
 
 impl<C: EngineConfig> Engine<C>
 where
     C::Search: SearchStrategy<C>,
-    C::Logger: LoggerTrait<C>,
 {
-    #[inline]
-    pub fn print(&self, msg: &str) {
-        C::Logger::print(msg, self.params().logger(), self)
+    pub fn search(&self, limits: &SearchLimits) -> (Move, SearchStats) {
+        self.search_state.set(SearchState::Running);
+        self.run_search(limits)
     }
 
-    pub fn search(&self, limits: &SearchLimits) -> SearchStats {
-        C::Search::execute(limits, self.params().search(), self)
+    pub fn spawn_search<'scope, 'env>(
+        &'env self,
+        scope: &'scope Scope<'scope, 'env>,
+        limits: &'env SearchLimits,
+    ) -> ScopedJoinHandle<'scope, (Move, SearchStats)> {
+        self.search_state.set(SearchState::Running);
+        scope.spawn(move || self.run_search(limits))
+    }
+
+    fn run_search(&self, limits: &SearchLimits) -> (Move, SearchStats) {
+        self.reporter.search_started(limits, self);
+
+        let (best_move, stats) = C::Search::execute(limits, self.params().search(), self);
+
+        self.search_state.transition(SearchState::Running, SearchState::Ended);
+
+        self.reporter.search_ended(&stats, self);
+
+        if limits.is_infinite() {
+            self.wait_for_interrupt();
+        }
+
+        self.reporter.best_move(best_move, self);
+
+        self.search_state.set(SearchState::Idle);
+
+        (best_move, stats)
+    }
+
+    fn wait_for_interrupt(&self) {
+        while !self.is_interrupted() {
+            std::thread::sleep(STOP_POLL_INTERVAL);
+        }
+    }
+}
+
+impl<C: EngineConfig> Engine<C>
+where
+    C::TimeManager: TimeManagerStrategy<C>,
+{
+    pub fn should_stop(
+        &self,
+        iterations: u64,
+        limits: &SearchLimits,
+        stats: &SearchStats,
+        time_manager: &C::TimeManager,
+    ) -> bool {
+        if self.is_stopped() {
+            return true;
+        }
+
+        if self.tree().is_full() {
+            return true;
+        }
+
+        if limits.is_infinite() {
+            return false;
+        }
+
+        if limits.nodes().is_some_and(|nodes| stats.iterations() >= nodes) {
+            return true;
+        }
+
+        if limits.depth().is_some_and(|depth| stats.avg_depth() >= depth) {
+            return true;
+        }
+
+        if iterations.is_multiple_of(HARD_LIMIT_CHECK_THRESHOLD)
+            && time_manager.hard_limit(stats.elapsed_ms(), self.params().time_manager(), self)
+        {
+            return true;
+        }
+
+        iterations.is_multiple_of(SOFT_LIMIT_CHECK_THRESHOLD)
+            && time_manager.soft_limit(stats.elapsed_ms(), self.params().time_manager(), self)
     }
 }

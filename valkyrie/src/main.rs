@@ -36,13 +36,14 @@
 
 mod command_processors;
 mod input_wrapper;
-mod logger;
+mod reporters;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use command_processors::misc_processor::MiscProcessor;
 use command_processors::uci_processor::UciProcessor;
 use input_wrapper::InputWrapper;
+use reporters::uci_reporter::UciReporter;
 use valkyrie_engine::engine::builder::backpropagation_strategy::BasicScalarBackpropagate;
 use valkyrie_engine::engine::builder::best_move_strategy::MaxQ;
 use valkyrie_engine::engine::builder::expansion_strategy::ClassicExpansion;
@@ -64,8 +65,9 @@ fn main() {
         .search::<BasicSequentialMCTS>()
         .time_manager::<SimpleTimeManager>()
         .node::<ClassicNode<AvgScoreEdge>>()
-        .logger::<crate::logger::Logger>()
         .build();
+
+    engine.set_reporter(UciReporter::default());
 
     let shutdown_token = AtomicBool::new(false);
     let mut input_wrapper = InputWrapper::new();

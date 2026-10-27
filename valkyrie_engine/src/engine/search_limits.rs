@@ -34,8 +34,6 @@
     documentation.
 */
 
-use crate::prelude::*;
-
 #[derive(Debug, Default)]
 pub struct SearchLimits {
     nodes: Option<u64>,
@@ -89,30 +87,5 @@ impl SearchLimits {
     }
     pub fn set_move_time(&mut self, move_time: Option<u64>) {
         self.move_time = move_time;
-    }
-    pub fn check_limits<C: EngineConfig>(&self, stats: &SearchStats, engine: &Engine<C>) -> bool {
-        if self.infinite {
-            return false;
-        }
-
-        if let Some(nodes) = self.nodes() {
-            let searched = if engine.params().general().iters_as_nodes() {
-                stats.iterations()
-            } else {
-                stats.cumulative_depth()
-            };
-
-            if nodes <= searched {
-                return true;
-            }
-        }
-
-        if let Some(depth) = self.depth()
-            && depth <= stats.avg_depth()
-        {
-            return true;
-        }
-
-        false
     }
 }

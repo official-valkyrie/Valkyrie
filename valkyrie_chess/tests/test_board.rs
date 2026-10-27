@@ -34,7 +34,18 @@
     documentation.
 */
 
-use valkyrie_chess::{Bitboard, ChessBoard, FEN, Move, MoveFlag, Piece, Side, Square};
+use valkyrie_chess::{
+    Bitboard,
+    ChessBoard,
+    ChessPosition,
+    FEN,
+    GameState,
+    Move,
+    MoveFlag,
+    Piece,
+    Side,
+    Square,
+};
 
 #[test]
 fn from_fen() {
@@ -89,6 +100,55 @@ fn insufficient_material() {
 
     let board = ChessBoard::from(&FEN::from("2k5/3b4/8/8/8/1B6/3K4/8 w - - 0 1"));
     assert!(board.is_insufficient_material());
+}
+
+#[test]
+fn fifty_move_rule() {
+    let board = ChessBoard::from(&FEN::from("7k/8/6K1/8/8/8/8/R7 b - - 99 80"));
+    assert!(!board.is_fifty_move_rule());
+
+    let board = ChessBoard::from(&FEN::from("7k/8/6K1/8/8/8/8/R7 b - - 100 80"));
+    assert!(board.is_fifty_move_rule());
+}
+
+#[test]
+fn draw() {
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1")));
+    assert_eq!(position.game_state(&position), GameState::Drew);
+    assert!(position.is_draw(&position));
+
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from("7k/6Q1/6K1/8/8/8/8/8 b - - 100 80")));
+    assert_eq!(position.game_state(&position), GameState::Lost(0));
+    assert!(!position.is_draw(&position));
+
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from("7k/8/6K1/8/8/8/8/R7 b - - 100 80")));
+    assert_eq!(position.game_state(&position), GameState::Drew);
+
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from("7k/8/6K1/8/8/8/8/R7 b - - 99 80")));
+    assert_eq!(position.game_state(&position), GameState::Ongoing);
+
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from("2k5/8/8/8/8/1B6/3K4/8 w - - 0 1")));
+    assert!(position.is_draw(&position));
+
+    let knight_shuffle = [
+        (Square::G1, Square::F3),
+        (Square::G8, Square::F6),
+        (Square::F3, Square::G1),
+        (Square::F6, Square::G8),
+    ];
+
+    let root = ChessPosition::from(ChessBoard::from(&FEN::start_position()));
+    let mut position = root;
+    for (from, to) in knight_shuffle.iter().chain(&knight_shuffle[..1]) {
+        position.make_move_no_mask(Move::from_squares(*from, *to, MoveFlag::QUIET_MOVE));
+    }
+    assert!(position.is_draw(&root));
+    assert!(!position.is_draw(&position));
+
+    for (from, to) in knight_shuffle[1..].iter().chain(&knight_shuffle[..1]) {
+        position.make_move_no_mask(Move::from_squares(*from, *to, MoveFlag::QUIET_MOVE));
+    }
+    assert!(position.is_draw(&position));
 }
 
 #[test]

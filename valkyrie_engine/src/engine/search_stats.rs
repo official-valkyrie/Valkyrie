@@ -34,22 +34,40 @@
     documentation.
 */
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::{
+    sync::atomic::{
+        AtomicU64,
+        Ordering,
+    },
+    time::Instant,
+};
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SearchStats {
+    start_time: Instant,
     max_depth: AtomicU64,
     cumulative_depth: AtomicU64,
     iterations: AtomicU64,
 }
 
+impl Default for SearchStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SearchStats {
     pub fn new() -> Self {
         Self {
+            start_time: Instant::now(),
             max_depth: AtomicU64::new(0),
             cumulative_depth: AtomicU64::new(0),
             iterations: AtomicU64::new(0),
         }
+    }
+
+    pub fn elapsed_ms(&self) -> u64 {
+        self.start_time.elapsed().as_millis() as u64
     }
 
     pub fn max_depth(&self) -> u64 {

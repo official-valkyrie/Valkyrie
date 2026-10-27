@@ -36,19 +36,12 @@
 
 use std::sync::atomic::{AtomicU16, Ordering};
 
+use valkyrie_chess::GameState;
+
 use super::{Clear, HasComponent};
 
 const PAYLOAD_OFFSET: u16 = 14;
 const PAYLOAD_MASK: u16 = 0x3FFF;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum GameState {
-    #[default]
-    Ongoing,
-    Won(u16),
-    Lost(u16),
-    Drew,
-}
 
 #[derive(Debug, Default)]
 pub struct GameStateStore(AtomicU16);

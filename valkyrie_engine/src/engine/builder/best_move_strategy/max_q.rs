@@ -36,7 +36,6 @@
 
 use crate::{
     engine::tree::components::{
-        HasMove,
         HasQ,
         HasVisits,
     },
@@ -54,8 +53,8 @@ impl<C: EngineConfig> BestMoveStrategy<C> for MaxQ
 where
     C::Edge: HasQ + HasVisits,
 {
-    fn execute(node_idx: NodeIndex, line_idx: usize, _params: &Self::Params, engine: &Engine<C>) -> (Move, i32) {
-        let edges = engine.tree()[node_idx].edges();
+    fn execute(node: &C::Node, line_idx: usize, _params: &Self::Params, _engine: &Engine<C>) -> Option<EdgeIndex> {
+        let edges = node.edges();
 
         let mut ranking: Vec<usize> = (0..edges.len()).collect();
         ranking.sort_unstable_by(|&lhs, &rhs| {
@@ -65,12 +64,6 @@ where
                 .then(rhs.visits().cmp(&lhs.visits()))
         });
 
-        let Some(&edge_idx) = ranking.get(line_idx) else {
-            return (Move::NULL, 0);
-        };
-
-        let edge = &edges[edge_idx];
-
-        (edge.mv(), edge.q().as_cp())
+        ranking.get(line_idx).map(|&edge_idx| EdgeIndex::new(edge_idx))
     }
 }

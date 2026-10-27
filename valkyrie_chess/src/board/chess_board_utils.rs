@@ -37,6 +37,11 @@
 use crate::{Attacks, Bitboard, Piece, Side, Square, attacks::Rays, board::ChessBoard};
 
 impl ChessBoard {
+    #[inline]
+    pub fn is_fifty_move_rule(&self) -> bool {
+        self.half_moves() >= 100
+    }
+
     pub fn is_insufficient_material(&self) -> bool {
         if (self.piece_mask(Piece::PAWN)
             | self.piece_mask(Piece::ROOK)

@@ -39,10 +39,6 @@ use std::{
     fmt::{Display, Formatter, Result},
 };
 
-use crate::Bitboard;
-
-use super::Square;
-
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FEN {
     pub(crate) board: [String; 8],
@@ -60,48 +56,6 @@ impl FEN {
 
     pub fn kiwipete_position() -> Self {
         Self::from("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w HAha - 0 1")
-    }
-
-    pub fn validate_fen(fen_string: &str) -> bool {
-        let fen_parts: Vec<&str> = fen_string.split_whitespace().collect();
-
-        if fen_parts.len() < 4 {
-            return false;
-        }
-
-        let board_parts: Vec<&str> = fen_parts[0].split('/').collect();
-        if board_parts.len() != 8 {
-            return false;
-        }
-
-        if fen_parts[0].matches('K').count() != 1 || fen_parts[0].matches('k').count() != 1 {
-            return false;
-        }
-
-        if fen_parts[1] != "w" && fen_parts[1] != "b" {
-            return false;
-        }
-
-        let valid_en_passant = if fen_parts[3] != "-" {
-            (Bitboard::from(Square::from(fen_parts[3])) & Bitboard::RANK_3.or(Bitboard::RANK_6))
-                .is_not_empty()
-        } else {
-            true
-        };
-
-        if fen_parts[3].len() > 2 || !valid_en_passant {
-            return false;
-        }
-
-        if fen_parts.len() > 4 && fen_parts[4].parse::<u8>().is_err() {
-            return false;
-        }
-
-        if fen_parts.len() > 5 && fen_parts[5].parse::<u16>().is_err() {
-            return false;
-        }
-
-        true
     }
 }
 

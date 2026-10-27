@@ -39,7 +39,10 @@ pub mod edge_storage;
 pub mod edges;
 pub mod nodes;
 
+pub(crate) mod edge_index;
 pub(crate) mod node_index;
+
+mod pv;
 
 use std::{
     ops::Index,
@@ -52,14 +55,18 @@ use std::{
 use components::{
     HasChild,
     HasMove,
+    HasQ,
+    HasVisits,
     NodeType,
 };
 
+pub use edge_index::EdgeIndex;
 pub use edge_storage::EdgesStore;
 pub use node_index::{
     AtomicNodeIndex,
     NodeIndex,
 };
+pub use pv::Pv;
 use valkyrie_chess::Move;
 
 use crate::{Engine, EngineConfig, engine::builder::BestMoveStrategy};
@@ -138,48 +145,65 @@ impl<N: NodeType> Tree<N> {
         Some(NodeIndex::new(node_idx))
     }
 
-    pub fn get_best_move<C: EngineConfig>(&self, engine: &Engine<C>) -> Move
-        where C::BestMove: BestMoveStrategy<C> 
-    {
-        let (mv, _) = C::BestMove::execute(self.root_index(), 0, engine.params().best_move(), engine);
-        mv
+    pub fn create_child(&self, node_idx: NodeIndex, edge_idx: EdgeIndex) -> Option<NodeIndex> {
+        let child_idx = self.create_node()?;
+        self[node_idx].edges()[edge_idx].set_child(child_idx);
+        Some(child_idx)
     }
 
-    pub fn get_pv<C: EngineConfig>(&self, pv_idx: usize, engine: &Engine<C>) -> (i32, Vec<Move>)
+    pub fn get_or_create_child(&self, node_idx: NodeIndex, edge_idx: EdgeIndex) -> Option<NodeIndex> {
+        let child_idx = self[node_idx].edges()[edge_idx].child();
+
+        if child_idx == NodeIndex::NULL {
+            self.create_child(node_idx, edge_idx)
+        } else {
+            Some(child_idx)
+        }
+    }
+
+    pub fn get_best_move<C: EngineConfig<Node = N>>(&self, engine: &Engine<C>) -> Move
         where C::BestMove: BestMoveStrategy<C>
     {
-        let mut pv = Vec::new();
-        let mut score = 0;
+        let root = self.root_node();
+
+        C::BestMove::execute(root, 0, engine.params().best_move(), engine)
+            .map_or(Move::NULL, |edge_idx| root.edges()[edge_idx].mv())
+    }
+
+    pub fn get_pv<C: EngineConfig<Node = N>>(&self, pv_idx: usize, engine: &Engine<C>) -> Option<Pv>
+    where
+        C::BestMove: BestMoveStrategy<C>,
+        N: HasVisits,
+        N::Edge: HasQ + HasVisits,
+    {
+        let root = self.root_node();
+        let root_edge = C::BestMove::execute(root, pv_idx, engine.params().best_move(), engine)?;
+
+        let (score, visit_percent) = {
+            let edges = root.edges();
+            let edge = &edges[root_edge];
+            (edge.q(), edge.visits() as f32 * 100.0 / root.visits().max(1) as f32)
+        };
+
+        let mut moves = Vec::new();
         let mut node_idx = self.root_index();
-        let mut line_idx = pv_idx;
+        let mut next_edge = Some(root_edge);
 
-        while self[node_idx].edge_count() > 0 {
-            let (mv, cp) = C::BestMove::execute(node_idx, line_idx, engine.params().best_move(), engine);
+        while let Some(edge_idx) = next_edge {
+            let edges = self[node_idx].edges();
+            let edge = &edges[edge_idx];
 
-            if mv == Move::NULL {
+            moves.push(edge.mv());
+
+            if !edge.has_child() {
                 break;
             }
 
-            if pv.is_empty() {
-                score = cp;
-            }
-
-            pv.push(mv);
-            line_idx = 0;
-
-            let child_idx = self[node_idx]
-                .edges()
-                .iter()
-                .find(|edge| edge.mv() == mv && edge.has_child())
-                .map(|edge| edge.child());
-
-            match child_idx {
-                Some(child_idx) => node_idx = child_idx,
-                None => break,
-            }
+            node_idx = edge.child();
+            next_edge = C::BestMove::execute(&self[node_idx], 0, engine.params().best_move(), engine);
         }
 
-        (score, pv)
+        Some(Pv::new(moves, score, visit_percent))
     }
 }
 

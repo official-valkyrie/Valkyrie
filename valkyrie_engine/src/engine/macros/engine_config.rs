@@ -116,8 +116,9 @@ macro_rules! define_engine_config {
                             &::valkyrie_chess::FEN::start_position()
                         )
                     ),
-                    interruption_token: ::std::sync::atomic::AtomicBool::new(false),
+                    search_state: ::std::default::Default::default(),
                     tree: $crate::engine::tree::Tree::new(hash_size),
+                    reporter: ::std::boxed::Box::new($crate::engine::NoReporter),
                 }
             }
         }

@@ -40,12 +40,12 @@ crate::register_strategy!(basic_scalar_backprop);
 
 pub trait BackpropagationStrategy<C: EngineConfig>: Strategy {
     fn execute(
-        payload: &<C::Simulation as SimulationStrategy<C>>::Output,
+        payload: <C::Simulation as SimulationStrategy<C>>::Output,
         node: &C::Node,
-        edge_idx: Option<usize>,
+        edge_idx: Option<EdgeIndex>,
         params: &Self::Params,
         engine: &Engine<C>,
-    )
+    ) -> <C::Simulation as SimulationStrategy<C>>::Output
     where
         C::Simulation: SimulationStrategy<C>;
 }

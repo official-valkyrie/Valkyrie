@@ -37,77 +37,7 @@
 use crate::prelude::*;
 
 crate::register_strategy!(puct);
-crate::register_strategy!(lazy_batch);
 
 pub trait ExplorationStrategy<C: EngineConfig>: Strategy {
-    fn execute(
-        distribution: &mut VisitDistribution,
-        node: &C::Node,
-        budget: u64,
-        params: &Self::Params,
-        engine: &Engine<C>,
-    );
-}
-
-#[derive(Clone)]
-pub struct VisitDistribution {
-    values: [VisitDistributionEntry; 256],
-    len: usize,
-}
-
-#[derive(Clone, Copy, Default)]
-pub struct VisitDistributionEntry {
-    edge_idx: usize,
-    visits: u64,
-}
-
-impl VisitDistributionEntry {
-    pub fn edge_index(&self) -> usize {
-        self.edge_idx
-    }
-
-    pub fn vists(&self) -> u64 {
-        self.visits
-    }
-}
-
-impl Default for VisitDistribution {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl VisitDistribution {
-    pub fn new() -> Self {
-        Self {
-            values: [VisitDistributionEntry::default(); 256],
-            len: 0
-        }
-    }
-
-    pub fn clear(&mut self) {
-        self.len = 0;
-    }
-
-    pub fn push(&mut self, edge_idx: usize, visits: u64) {
-        self.values[self.len] = VisitDistributionEntry { edge_idx, visits };
-        self.len = self.len + 1;
-    }
-
-    pub fn as_slice(&self) -> &[VisitDistributionEntry] {
-        &self.values[..self.len]
-    }
-
-    pub fn iter(&self) -> std::slice::Iter<'_, VisitDistributionEntry> {
-        self.as_slice().iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a VisitDistribution {
-    type Item = &'a VisitDistributionEntry;
-    type IntoIter = std::slice::Iter<'a, VisitDistributionEntry>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.as_slice().iter()
-    }
+    fn execute(node: &C::Node, params: &Self::Params, engine: &Engine<C>) -> EdgeIndex;
 }

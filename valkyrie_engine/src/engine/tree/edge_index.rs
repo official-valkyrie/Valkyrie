@@ -34,41 +34,52 @@
     documentation.
 */
 
-use valkyrie_chess::Move;
+use std::ops::{
+    Index,
+    IndexMut,
+};
 
-use crate::engine::Engine;
-use crate::engine::builder::{EngineConfig, Strategy};
-use crate::engine::search_stats::SearchStats;
-use crate::engine::strategy_params::EmptyParams;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct EdgeIndex(usize);
 
-pub trait LoggerTrait<C: EngineConfig>: Strategy {
-    fn print(msg: &str, params: &Self::Params, engine: &Engine<C>);
-    fn search_report(
-        time_passed: u64,
-        search_stats: &SearchStats,
-        params: &Self::Params,
-        engine: &Engine<C>,
-        end_of_search: bool,
-    );
-    fn best_move(mv: Move, params: &Self::Params, engine: &Engine<C>);
-}
-
-#[derive(Debug)]
-pub struct NoLogger;
-
-impl Strategy for NoLogger {
-    type Params = EmptyParams;
-}
-
-impl<C: EngineConfig> LoggerTrait<C> for NoLogger {
-    fn print(_msg: &str, _params: &Self::Params, _engine: &Engine<C>) {}
-    fn search_report(
-        _time_passed: u64,
-        _search_stats: &SearchStats,
-        _params: &Self::Params,
-        _engine: &Engine<C>,
-        _end_of_search: bool,
-    ) {
+impl EdgeIndex {
+    #[inline]
+    pub fn new(value: usize) -> Self {
+        Self(value)
     }
-    fn best_move(_mv: Move, _params: &Self::Params, _engine: &Engine<C>) {}
+
+    #[inline]
+    pub fn raw(&self) -> usize {
+        self.0
+    }
+}
+
+impl From<usize> for EdgeIndex {
+    #[inline]
+    fn from(value: usize) -> Self {
+        Self(value)
+    }
+}
+
+impl From<EdgeIndex> for usize {
+    #[inline]
+    fn from(value: EdgeIndex) -> Self {
+        value.0
+    }
+}
+
+impl<T> Index<EdgeIndex> for Vec<T> {
+    type Output = T;
+
+    #[inline]
+    fn index(&self, index: EdgeIndex) -> &Self::Output {
+        &self[index.0]
+    }
+}
+
+impl<T> IndexMut<EdgeIndex> for Vec<T> {
+    #[inline]
+    fn index_mut(&mut self, index: EdgeIndex) -> &mut Self::Output {
+        &mut self[index.0]
+    }
 }

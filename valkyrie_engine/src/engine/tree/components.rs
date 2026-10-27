@@ -47,7 +47,7 @@ mod visits;
 
 pub use child::{ChildStore, HasChild};
 pub use draw_chance::{DrawStore, HasDrawChance};
-pub use game_state::{GameState, GameStateStore, HasGameState};
+pub use game_state::{GameStateStore, HasGameState};
 pub use mv::{HasMove, MoveStore};
 pub use policy::{HasPolicy, PolicyStore};
 pub use q::HasQ;
