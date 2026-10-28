@@ -35,7 +35,6 @@
 */
 
 mod compose;
-mod compound_params;
 mod engine_config;
 mod params_common;
 mod register;

@@ -38,7 +38,6 @@
 fn main() {
     use std::process::Command;
 
-    //Monty yoink
     let git_commit_hash = Command::new("git")
         .args(["rev-parse", "--short=8", "HEAD"])
         .output()

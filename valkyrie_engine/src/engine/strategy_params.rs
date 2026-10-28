@@ -132,10 +132,102 @@ impl UciOptionType for String {
 }
 
 pub trait StrategyParams: std::fmt::Debug + Clone + Send + Sync {
+    const OPTION_NAMES: OptionNames = OptionNames {
+        own: &[],
+        inner: &[],
+    };
+
     fn new() -> Self;
     fn set_option(&mut self, name: &str, value: &str) -> Result<(), OptionViolation>;
     fn print_options(&self);
     fn print_tunables(&self);
+}
+
+const DUPLICATE_MESSAGE: &str = "Duplicate option name: ";
+const MESSAGE_CAPACITY: usize = 128;
+
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct OptionNames {
+    pub own: &'static [&'static str],
+    pub inner: &'static [&'static OptionNames],
+}
+
+impl OptionNames {
+    pub const fn assert_unique(&self) {
+        let Some(name) = self.find_duplicate(self) else {
+            return;
+        };
+
+        let mut message = [0u8; MESSAGE_CAPACITY];
+        let len = write_message(name, &mut message);
+        let (bytes, _) = message.split_at(len);
+
+        match std::str::from_utf8(bytes) {
+            Ok(text) => panic!("{}", text),
+            Err(_) => panic!("Duplicate option name"),
+        }
+    }
+
+    const fn find_duplicate(&self, root: &OptionNames) -> Option<&'static str> {
+        let mut idx = 0;
+        while idx < self.own.len() {
+            if root.count(self.own[idx]) > 1 {
+                return Some(self.own[idx]);
+            }
+            idx += 1;
+        }
+
+        let mut idx = 0;
+        while idx < self.inner.len() {
+            if let Some(name) = self.inner[idx].find_duplicate(root) {
+                return Some(name);
+            }
+            idx += 1;
+        }
+
+        None
+    }
+
+    const fn count(&self, name: &str) -> usize {
+        let mut total = 0;
+
+        let mut idx = 0;
+        while idx < self.own.len() {
+            if self.own[idx].eq_ignore_ascii_case(name) {
+                total += 1;
+            }
+            idx += 1;
+        }
+
+        let mut idx = 0;
+        while idx < self.inner.len() {
+            total += self.inner[idx].count(name);
+            idx += 1;
+        }
+
+        total
+    }
+}
+
+const fn write_message(name: &str, message: &mut [u8; MESSAGE_CAPACITY]) -> usize {
+    let mut len = 0;
+
+    let mut idx = 0;
+    while idx < DUPLICATE_MESSAGE.len() {
+        message[len] = DUPLICATE_MESSAGE.as_bytes()[idx];
+        len += 1;
+        idx += 1;
+    }
+
+    let mut idx = 0;
+    while idx < name.len() && len < MESSAGE_CAPACITY {
+        message[len] = name.as_bytes()[idx];
+        len += 1;
+        idx += 1;
+    }
+
+    len
 }
 
 #[derive(Debug, Clone)]

@@ -37,7 +37,10 @@
 #[macro_export]
 macro_rules! define_strategy_params {
     (
-        $name:ident {
+        $name:ident $(< $( $gen:ident : $bound:path ),* >)? {
+            $(Strategies {
+                $( $inner_field:ident : $inner_type:ty; )*
+            })?
             $(Options {
                 $(
                     [$option_key:literal] $option:ident : $option_ty:ty =>
@@ -71,7 +74,10 @@ macro_rules! define_strategy_params {
     ) => {
         #[derive(Debug, Clone)]
         #[allow(non_snake_case)]
-        pub struct $name {
+        pub struct $name $(< $( $gen: $bound ),* >)? {
+            $(
+                $($inner_field: $inner_type,)*
+            )?
             $(
                 $($option: $option_ty,)*
             )?
@@ -86,16 +92,21 @@ macro_rules! define_strategy_params {
             )?
         }
 
-        impl Default for $name {
+        impl $(< $( $gen: $bound ),* >)? Default for $name $(< $( $gen ),* >)? {
             fn default() -> Self {
                 Self::new()
             }
         }
 
         #[allow(non_snake_case)]
-        impl $name {
+        impl $(< $( $gen: $bound ),* >)? $name $(< $( $gen ),* >)? {
             pub fn new() -> Self {
+                const { <Self as $crate::StrategyParams>::OPTION_NAMES.assert_unique() }
+
                 Self {
+                    $(
+                        $( $inner_field: <$inner_type as $crate::StrategyParams>::new(),)*
+                    )?
                     $(
                         $( $option: $option_default,)*
                     )?
@@ -111,6 +122,14 @@ macro_rules! define_strategy_params {
                 }
             }
 
+            $(
+                $(
+                    pub fn $inner_field(&self) -> &$inner_type {
+                        &self.$inner_field
+                    }
+                )*
+            )?
+
             $( $crate::__params_option_accessors! {
                 $( [$option_key] $option : $option_ty => $option_default $(, $option_min, $option_max)?; )*
             } )?
@@ -124,7 +143,19 @@ macro_rules! define_strategy_params {
             } )?
         }
 
-        impl $crate::StrategyParams for $name {
+        impl $(< $( $gen: $bound ),* >)? $crate::StrategyParams for $name $(< $( $gen ),* >)? {
+            const OPTION_NAMES: $crate::OptionNames = $crate::OptionNames {
+                own: &[
+                    $( $( $option_key, )* )?
+                    $( $( $button_key, )* )?
+                    $( $( stringify!($tunable), )* )?
+                    $( $( stringify!($variable), )* )?
+                ],
+                inner: &[
+                    $( $( &<$inner_type as $crate::StrategyParams>::OPTION_NAMES, )* )?
+                ],
+            };
+
             fn new() -> Self {
                 Self::new()
             }
@@ -147,6 +178,15 @@ macro_rules! define_strategy_params {
                     $( $variable : $variable_ty = $variable_default; )*
                 ); )?
 
+                $(
+                    $(
+                        match $crate::StrategyParams::set_option(&mut self.$inner_field, _name, _value) {
+                            Err($crate::OptionViolation::Unknown(_)) => {}
+                            result => return result,
+                        }
+                    )*
+                )?
+
                 Err($crate::OptionViolation::Unknown(_name.to_string()))
             }
 
@@ -163,6 +203,10 @@ macro_rules! define_strategy_params {
                         $( $tunable : $tunable_ty => $tunable_default, $tunable_min, $tunable_max, $tunable_c, $tunable_r; )*
                     ); )?
                 }
+
+                $(
+                    $( $crate::StrategyParams::print_options(&self.$inner_field); )*
+                )?
             }
 
             fn print_tunables(&self) {
@@ -178,6 +222,10 @@ macro_rules! define_strategy_params {
                         $( $tunable : $tunable_ty => $tunable_default, $tunable_min, $tunable_max, $tunable_c, $tunable_r; )*
                     ); )?
                 }
+
+                $(
+                    $( $crate::StrategyParams::print_tunables(&self.$inner_field); )*
+                )?
             }
         }
     };

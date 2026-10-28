@@ -52,7 +52,9 @@ pub use pv::Pv;
 pub use reporter::{NoReporter, Reporter};
 pub use search_limits::SearchLimits;
 pub use search_stats::SearchStats;
-pub use strategy_params::{EmptyParams, OptionViolation, StrategyParams, UciOptionType};
+pub use strategy_params::{
+    EmptyParams, OptionNames, OptionViolation, StrategyParams, UciOptionType,
+};
 
 use std::{
     thread::{Scope, ScopedJoinHandle},

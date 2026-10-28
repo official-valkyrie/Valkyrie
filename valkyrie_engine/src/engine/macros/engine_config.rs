@@ -118,7 +118,17 @@ macro_rules! define_engine_config {
         }
 
         impl<C: EngineConfig> EngineParams<C> {
+            const OPTION_NAMES: $crate::OptionNames = $crate::OptionNames {
+                own: &[],
+                inner: &[
+                    &<$general_ty as $crate::StrategyParams>::OPTION_NAMES,
+                    $( &<<C::$s_assoc as Strategy>::Params as $crate::StrategyParams>::OPTION_NAMES, )+
+                ],
+            };
+
             pub fn new() -> Self {
+                const { Self::OPTION_NAMES.assert_unique() }
+
                 Self {
                     general: <$general_ty as $crate::StrategyParams>::new(),
                     $( $s_method: <<C::$s_assoc as Strategy>::Params as $crate::StrategyParams>::new(), )+
