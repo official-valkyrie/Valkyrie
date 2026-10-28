@@ -35,10 +35,7 @@
 */
 
 use std::{
-    sync::atomic::{
-        AtomicU64,
-        Ordering,
-    },
+    sync::atomic::{AtomicU64, Ordering},
     time::Instant,
 };
 

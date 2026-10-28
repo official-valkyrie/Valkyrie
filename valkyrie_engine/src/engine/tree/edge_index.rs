@@ -34,10 +34,7 @@
     documentation.
 */
 
-use std::ops::{
-    Index,
-    IndexMut,
-};
+use std::ops::{Index, IndexMut};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct EdgeIndex(usize);

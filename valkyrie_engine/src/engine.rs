@@ -39,42 +39,35 @@ mod macros;
 pub mod builder;
 pub mod tree;
 
+mod policy_entry;
+mod pv;
 mod reporter;
 mod search_limits;
 mod search_state;
 mod search_stats;
 mod strategy_params;
-mod policy_entry;
 
 pub use builder::{EngineBuilder, EngineConfig, EngineParams, GeneralParams, SearchStrategy};
-pub use reporter::{
-    NoReporter,
-    Reporter,
-};
+pub use pv::Pv;
+pub use reporter::{NoReporter, Reporter};
 pub use search_limits::SearchLimits;
 pub use search_stats::SearchStats;
-pub use strategy_params::{EmptyParams, OptionError, StrategyParams, UciOptionType};
+pub use strategy_params::{EmptyParams, OptionViolation, StrategyParams, UciOptionType};
 
 use std::{
-    thread::{
-        Scope,
-        ScopedJoinHandle,
-    },
+    thread::{Scope, ScopedJoinHandle},
     time::Duration,
 };
 
-use valkyrie_chess::{
-    ChessPosition,
-    Move,
-};
+use valkyrie_chess::{ChessBoard, ChessPosition, FEN, GameState, Move};
 
 use crate::engine::{
-    builder::TimeManagerStrategy,
-    search_state::{
-        AtomicSearchState,
-        SearchState,
+    builder::{BestMoveStrategy, TimeManagerStrategy},
+    search_state::{AtomicSearchState, SearchState},
+    tree::{
+        Tree,
+        components::{HasChild, HasGameState, HasMove, HasScore, HasVisits, NodeType},
     },
-    tree::Tree,
 };
 
 const HARD_LIMIT_CHECK_THRESHOLD: u64 = 128;
@@ -91,14 +84,41 @@ pub struct Engine<C: EngineConfig> {
 }
 
 impl<C: EngineConfig> Engine<C> {
+    pub(crate) fn new(params: EngineParams<C>) -> Self {
+        let tree = Tree::new(params.general().hash() as usize);
+
+        Self {
+            params,
+            position: ChessPosition::from(ChessBoard::from(&FEN::start_position())),
+            search_state: AtomicSearchState::default(),
+            tree,
+            reporter: Box::new(NoReporter),
+        }
+    }
+
     #[inline]
     pub fn params(&self) -> &EngineParams<C> {
         &self.params
     }
 
-    #[inline]
-    pub fn params_mut(&mut self) -> &mut EngineParams<C> {
-        &mut self.params
+    pub fn set_option(&mut self, name: &str, value: &str) -> Result<(), OptionViolation> {
+        if name.is_empty() {
+            return Err(OptionViolation::MissingName);
+        }
+
+        let hash = self.params.general().hash();
+
+        self.params.set_option(name, value)?;
+
+        if self.params.general().hash() != hash {
+            self.tree.resize(self.params.general().hash() as usize);
+        }
+
+        if name.eq_ignore_ascii_case("ClearHash") {
+            self.tree.clear();
+        }
+
+        Ok(())
     }
 
     #[inline]
@@ -117,11 +137,6 @@ impl<C: EngineConfig> Engine<C> {
     }
 
     #[inline]
-    pub fn tree_mut(&mut self) -> &mut Tree<C::Node> {
-        &mut self.tree
-    }
-
-    #[inline]
     pub fn reported_nodes(&self, stats: &SearchStats) -> u64 {
         if self.params.general().iters_as_nodes() {
             stats.iterations()
@@ -132,8 +147,10 @@ impl<C: EngineConfig> Engine<C> {
 
     #[inline]
     pub fn stop(&self) {
-        self.search_state.transition(SearchState::Running, SearchState::Interrupted);
-        self.search_state.transition(SearchState::Ended, SearchState::Interrupted);
+        self.search_state
+            .transition(SearchState::Running, SearchState::Interrupted);
+        self.search_state
+            .transition(SearchState::Ended, SearchState::Interrupted);
     }
 
     #[inline]
@@ -190,11 +207,14 @@ where
     }
 
     fn run_search(&self, limits: &SearchLimits) -> (Move, SearchStats) {
+        self.tree.clear();
+
         self.reporter.search_started(limits, self);
 
         let (best_move, stats) = C::Search::execute(limits, self.params().search(), self);
 
-        self.search_state.transition(SearchState::Running, SearchState::Ended);
+        self.search_state
+            .transition(SearchState::Running, SearchState::Ended);
 
         self.reporter.search_ended(&stats, self);
 
@@ -239,11 +259,17 @@ where
             return false;
         }
 
-        if limits.nodes().is_some_and(|nodes| stats.iterations() >= nodes) {
+        if limits
+            .nodes()
+            .is_some_and(|nodes| stats.iterations() >= nodes)
+        {
             return true;
         }
 
-        if limits.depth().is_some_and(|depth| stats.avg_depth() >= depth) {
+        if limits
+            .depth()
+            .is_some_and(|depth| stats.avg_depth() >= depth)
+        {
             return true;
         }
 
@@ -255,5 +281,63 @@ where
 
         iterations.is_multiple_of(SOFT_LIMIT_CHECK_THRESHOLD)
             && time_manager.soft_limit(stats.elapsed_ms(), self.params().time_manager(), self)
+    }
+}
+
+impl<C: EngineConfig> Engine<C>
+where
+    C::BestMove: BestMoveStrategy<C>,
+{
+    pub fn best_move(&self) -> Move {
+        let root = self.tree().root_node();
+
+        C::BestMove::execute(root, 0, self.params().best_move(), self)
+            .map_or(Move::NULL, |edge_idx| root.edges()[edge_idx].mv())
+    }
+
+    pub fn pv(&self, pv_idx: usize) -> Option<Pv<<C::Edge as HasScore>::Score>>
+    where
+        C::Node: HasVisits,
+        C::Edge: HasScore + HasVisits,
+    {
+        let tree = self.tree();
+        let root = tree.root_node();
+        let root_edge = C::BestMove::execute(root, pv_idx, self.params().best_move(), self)?;
+
+        let (score, state, visit_percent) = {
+            let edges = root.edges();
+            let edge = &edges[root_edge];
+            let state = if edge.has_child() {
+                tree[edge.child()].game_state().for_parent()
+            } else {
+                GameState::Ongoing
+            };
+
+            (
+                edge.score(),
+                state,
+                edge.visits() as f32 * 100.0 / root.visits().max(1) as f32,
+            )
+        };
+
+        let mut moves = Vec::new();
+        let mut node_idx = tree.root_index();
+        let mut next_edge = Some(root_edge);
+
+        while let Some(edge_idx) = next_edge {
+            let edges = tree[node_idx].edges();
+            let edge = &edges[edge_idx];
+
+            moves.push(edge.mv());
+
+            if !edge.has_child() {
+                break;
+            }
+
+            node_idx = edge.child();
+            next_edge = C::BestMove::execute(&tree[node_idx], 0, self.params().best_move(), self);
+        }
+
+        Some(Pv::new(moves, score, state, visit_percent))
     }
 }

@@ -42,6 +42,7 @@ mod game_state;
 mod mv;
 mod policy;
 mod q;
+mod score;
 mod score_sum;
 mod visits;
 
@@ -51,6 +52,7 @@ pub use game_state::{GameStateStore, HasGameState};
 pub use mv::{HasMove, MoveStore};
 pub use policy::{HasPolicy, PolicyStore};
 pub use q::HasQ;
+pub use score::{HasScore, Score};
 pub use score_sum::{HasScoreSum, ScoreSumStore};
 pub use visits::{HasVisits, VisitsStore};
 
@@ -69,10 +71,18 @@ pub trait Clear {
     fn clear(&self);
 }
 
-pub trait EdgeType: Clone + Default + std::fmt::Debug + Send + Sync + 'static + HasMove + HasChild {}
-impl<T: Clone + Default + std::fmt::Debug + Send + Sync + 'static + HasMove + HasChild> EdgeType for T {}
+pub trait EdgeType:
+    Clone + Default + std::fmt::Debug + Send + Sync + 'static + HasMove + HasChild
+{
+}
+impl<T: Clone + Default + std::fmt::Debug + Send + Sync + 'static + HasMove + HasChild> EdgeType
+    for T
+{
+}
 
-pub trait NodeType: Clone + Default + std::fmt::Debug + Send + Sync + 'static + HasGameState + Clear {
+pub trait NodeType:
+    Clone + Default + std::fmt::Debug + Send + Sync + 'static + HasGameState + Clear
+{
     type Edge: EdgeType;
 
     fn edges(&self) -> RwLockReadGuard<'_, Vec<Self::Edge>>;

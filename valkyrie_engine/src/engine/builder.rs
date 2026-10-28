@@ -34,22 +34,22 @@
     documentation.
 */
 
+pub mod backpropagation_strategy;
 pub mod best_move_strategy;
 pub mod expansion_strategy;
 pub mod exploration_strategy;
-pub mod backpropagation_strategy;
 pub mod payload;
-pub mod simulation_strategy;
 pub mod search_strategy;
+pub mod simulation_strategy;
 pub mod time_manager_strategy;
 
+pub use self::backpropagation_strategy::BackpropagationStrategy;
 pub use self::best_move_strategy::BestMoveStrategy;
 pub use self::expansion_strategy::ExpansionStrategy;
 pub use self::exploration_strategy::ExplorationStrategy;
 pub use self::payload::{HasWdl, Payload};
-pub use self::simulation_strategy::SimulationStrategy;
-pub use self::backpropagation_strategy::BackpropagationStrategy;
 pub use self::search_strategy::SearchStrategy;
+pub use self::simulation_strategy::SimulationStrategy;
 pub use self::time_manager_strategy::TimeManagerStrategy;
 
 use crate::engine::strategy_params::StrategyParams;

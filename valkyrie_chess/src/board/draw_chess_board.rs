@@ -34,13 +34,7 @@
     documentation.
 */
 
-use crate::{
-    FEN,
-    Piece,
-    Side,
-    Square,
-    board::ChessBoard,
-};
+use crate::{FEN, Piece, Side, Square, board::ChessBoard};
 
 const PIECE_SYMBOLS: [char; 6] = ['p', 'n', 'b', 'r', 'q', 'k'];
 

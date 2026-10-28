@@ -34,19 +34,9 @@
     documentation.
 */
 
-use std::fmt::{
-    Display,
-    Formatter,
-    Result,
-};
+use std::fmt::{Display, Formatter, Result};
 
-use crate::{
-    ChessBoard,
-    FEN,
-    Piece,
-    Side,
-    Square,
-};
+use crate::{ChessBoard, FEN, Piece, Side, Square};
 
 const EMPTY: char = '.';
 
@@ -73,18 +63,37 @@ pub enum FenViolation {
 impl Display for FenViolation {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
         match self {
-            Self::MissingFields(found) => write!(formatter, "expected at least 4 fields, found {found}"),
-            Self::ExtraFields(found) => write!(formatter, "expected at most 6 fields, found {found}"),
+            Self::MissingFields(found) => {
+                write!(formatter, "expected at least 4 fields, found {found}")
+            }
+            Self::ExtraFields(found) => {
+                write!(formatter, "expected at most 6 fields, found {found}")
+            }
             Self::WrongRankCount(found) => write!(formatter, "expected 8 ranks, found {found}"),
             Self::InvalidRank(rank) => {
-                write!(formatter, "rank {rank} must describe exactly 8 squares using pnbrqkPNBRQK and digits 1-8")
+                write!(
+                    formatter,
+                    "rank {rank} must describe exactly 8 squares using pnbrqkPNBRQK and digits 1-8"
+                )
             }
-            Self::KingCount(side, found) => write!(formatter, "expected 1 {} king, found {found}", side_name(*side)),
+            Self::KingCount(side, found) => write!(
+                formatter,
+                "expected 1 {} king, found {found}",
+                side_name(*side)
+            ),
             Self::PawnCount(side, found) => {
-                write!(formatter, "{} has {found} pawns, at most 8 are allowed", side_name(*side))
+                write!(
+                    formatter,
+                    "{} has {found} pawns, at most 8 are allowed",
+                    side_name(*side)
+                )
             }
             Self::PieceCount(side, found) => {
-                write!(formatter, "{} has {found} pieces, at most 16 are allowed", side_name(*side))
+                write!(
+                    formatter,
+                    "{} has {found} pieces, at most 16 are allowed",
+                    side_name(*side)
+                )
             }
             Self::PawnOnBackRank => write!(formatter, "pawns can't stand on rank 1 or 8"),
             Self::InvalidSideToMove => write!(formatter, "side to move must be 'w' or 'b'"),
@@ -94,15 +103,26 @@ impl Display for FenViolation {
                 "castling rights must be '-' or up to two of KQ/A-H for white and kq/a-h for black, without repeats"
             ),
             Self::UnavailableCastlingRight(right) => {
-                write!(formatter, "castling right '{right}' needs a king and a matching rook on their home rank")
+                write!(
+                    formatter,
+                    "castling right '{right}' needs a king and a matching rook on their home rank"
+                )
             }
             Self::InvalidEnPassant => write!(
                 formatter,
                 "en passant must be '-' or a square on rank 6 with white to move, rank 3 with black to move"
             ),
-            Self::ImpossibleEnPassant => write!(formatter, "no pawn could have just moved past the en passant square"),
-            Self::InvalidHalfMoveClock => write!(formatter, "half-move clock must be a number from 0 to 255"),
-            Self::InvalidFullMoveNumber => write!(formatter, "full-move number must be a number from 1 to 65535"),
+            Self::ImpossibleEnPassant => write!(
+                formatter,
+                "no pawn could have just moved past the en passant square"
+            ),
+            Self::InvalidHalfMoveClock => {
+                write!(formatter, "half-move clock must be a number from 0 to 255")
+            }
+            Self::InvalidFullMoveNumber => write!(
+                formatter,
+                "full-move number must be a number from 1 to 65535"
+            ),
         }
     }
 }
@@ -125,7 +145,12 @@ impl FEN {
         let side_to_move = validate_side_to_move(fen_parts[1], &mut violations);
 
         validate_castling_rights(fen_parts[2], squares.as_ref(), &mut violations);
-        validate_en_passant(fen_parts[3], squares.as_ref(), side_to_move, &mut violations);
+        validate_en_passant(
+            fen_parts[3],
+            squares.as_ref(),
+            side_to_move,
+            &mut violations,
+        );
 
         if let (Some(squares), Some(side_to_move)) = (&squares, side_to_move)
             && count(squares, 'K') == 1
@@ -135,11 +160,17 @@ impl FEN {
             violations.push(FenViolation::OpponentInCheck);
         }
 
-        if fen_parts.get(4).is_some_and(|half_moves| half_moves.parse::<u8>().is_err()) {
+        if fen_parts
+            .get(4)
+            .is_some_and(|half_moves| half_moves.parse::<u8>().is_err())
+        {
             violations.push(FenViolation::InvalidHalfMoveClock);
         }
 
-        if fen_parts.get(5).is_some_and(|full_moves| !full_moves.parse::<u16>().is_ok_and(|number| number > 0)) {
+        if fen_parts
+            .get(5)
+            .is_some_and(|full_moves| !full_moves.parse::<u16>().is_ok_and(|number| number > 0))
+        {
             violations.push(FenViolation::InvalidFullMoveNumber);
         }
 
@@ -179,7 +210,11 @@ fn validate_placement(placement: &str, violations: &mut Vec<FenViolation>) -> Op
         return None;
     }
 
-    if squares[..8].iter().chain(&squares[56..]).any(|&symbol| symbol == 'P' || symbol == 'p') {
+    if squares[..8]
+        .iter()
+        .chain(&squares[56..])
+        .any(|&symbol| symbol == 'P' || symbol == 'p')
+    {
         violations.push(FenViolation::PawnOnBackRank);
     }
 
@@ -191,7 +226,9 @@ fn validate_placement(placement: &str, violations: &mut Vec<FenViolation>) -> Op
 
         let pieces = squares
             .iter()
-            .filter(|&&symbol| symbol != EMPTY && symbol.is_ascii_uppercase() == (side == Side::WHITE))
+            .filter(|&&symbol| {
+                symbol != EMPTY && symbol.is_ascii_uppercase() == (side == Side::WHITE)
+            })
             .count();
         if pieces > 16 {
             violations.push(FenViolation::PieceCount(side, pieces));
@@ -212,13 +249,20 @@ fn validate_side_to_move(field: &str, violations: &mut Vec<FenViolation>) -> Opt
     }
 }
 
-fn validate_castling_rights(field: &str, squares: Option<&[char; 64]>, violations: &mut Vec<FenViolation>) {
+fn validate_castling_rights(
+    field: &str,
+    squares: Option<&[char; 64]>,
+    violations: &mut Vec<FenViolation>,
+) {
     if field == "-" {
         return;
     }
 
     let is_right = |symbol: char| matches!(symbol, 'K' | 'Q' | 'k' | 'q' | 'A'..='H' | 'a'..='h');
-    let has_repeats = field.chars().enumerate().any(|(index, symbol)| field.chars().skip(index + 1).any(|other| other == symbol));
+    let has_repeats = field
+        .chars()
+        .enumerate()
+        .any(|(index, symbol)| field.chars().skip(index + 1).any(|other| other == symbol));
     let white_rights = field.chars().filter(char::is_ascii_uppercase).count();
     let black_rights = field.chars().filter(char::is_ascii_lowercase).count();
 
@@ -312,7 +356,11 @@ fn is_opponent_in_check(squares: &[char; 64], side_to_move: Side) -> bool {
                 Side::BLACK
             };
 
-            board.set_piece_on_square(Square::from_coords((index / 8) as u8, (index % 8) as u8), piece, side);
+            board.set_piece_on_square(
+                Square::from_coords((index / 8) as u8, (index % 8) as u8),
+                piece,
+                side,
+            );
         }
     }
 

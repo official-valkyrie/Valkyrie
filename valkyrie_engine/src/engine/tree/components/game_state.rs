@@ -56,7 +56,8 @@ impl Clone for GameStateStore {
 impl Clear for GameStateStore {
     #[inline]
     fn clear(&self) {
-        self.0.store(Self::pack(GameState::Ongoing), Ordering::Relaxed);
+        self.0
+            .store(Self::pack(GameState::Ongoing), Ordering::Relaxed);
     }
 }
 

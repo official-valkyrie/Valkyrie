@@ -43,5 +43,10 @@ crate::register_strategy!(material_evaluation);
 pub trait SimulationStrategy<C: EngineConfig>: Strategy {
     type Output: Payload;
 
-    fn execute(raw_eval: &[f32], position: &ChessPosition, params: &Self::Params, engine: &Engine<C>) -> Self::Output;
+    fn execute(
+        raw_eval: &[f32],
+        position: &ChessPosition,
+        params: &Self::Params,
+        engine: &Engine<C>,
+    ) -> Self::Output;
 }

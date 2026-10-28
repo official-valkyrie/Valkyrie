@@ -78,7 +78,7 @@ where
 
         Searcher::new(limits, params, &search_stats, engine).run();
 
-        (engine.tree().get_best_move(engine), search_stats)
+        (engine.best_move(), search_stats)
     }
 }
 

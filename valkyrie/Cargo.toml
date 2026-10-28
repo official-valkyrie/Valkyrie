@@ -20,6 +20,5 @@ valkyrie_chess = { workspace = true }
 chrono = "0.4"
 
 [features]
-tunable = ["valkyrie_engine/tunable"]
 debug = ["valkyrie_engine/debug"]
-release = []
+release = ["valkyrie_engine/release"]

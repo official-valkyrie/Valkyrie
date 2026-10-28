@@ -42,3 +42,23 @@ pub enum GameState {
     Lost(u16),
     Drew,
 }
+
+impl GameState {
+    #[inline]
+    pub fn for_parent(self) -> Self {
+        match self {
+            Self::Won(plies) => Self::Lost(plies.saturating_add(1)),
+            Self::Lost(plies) => Self::Won(plies.saturating_add(1)),
+            state => state,
+        }
+    }
+
+    #[inline]
+    pub fn mate_in(self) -> Option<i32> {
+        match self {
+            Self::Won(plies) => Some(i32::from(plies.div_ceil(2))),
+            Self::Lost(plies) => Some(-i32::from(plies.div_ceil(2))),
+            _ => None,
+        }
+    }
+}

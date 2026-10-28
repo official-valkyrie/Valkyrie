@@ -77,7 +77,7 @@ macro_rules! define_strategy_params {
             )?
             $(
                 $(
-                #[cfg(feature = "tunable")]
+                #[cfg(not(feature = "release"))]
                 $tunable: $tunable_ty,
                 )*
             )?
@@ -101,7 +101,7 @@ macro_rules! define_strategy_params {
                     )?
                     $(
                         $(
-                        #[cfg(feature = "tunable")]
+                        #[cfg(not(feature = "release"))]
                         $tunable: $tunable_default,
                         )*
                     )?
@@ -129,14 +129,14 @@ macro_rules! define_strategy_params {
                 Self::new()
             }
 
-            fn set_option(&mut self, _name: &str, _value: &str) -> ::std::result::Result<(), $crate::OptionError> {
+            fn set_option(&mut self, _name: &str, _value: &str) -> ::std::result::Result<(), $crate::OptionViolation> {
                 $( $crate::__params_set_options!(self, _name, _value;
                     $( [$option_key] $option : $option_ty => $option_default $(, $option_min, $option_max)?; )*
                 ); )?
 
                 $( $crate::__params_check_buttons!(_name; $( $button_key, )*); )?
 
-                #[cfg(feature = "tunable")]
+                #[cfg(not(feature = "release"))]
                 {
                     $( $crate::__params_set_tunables!(self, _name, _value;
                         $( $tunable : $tunable_ty => $tunable_default, $tunable_min, $tunable_max, $tunable_c, $tunable_r; )*
@@ -147,7 +147,7 @@ macro_rules! define_strategy_params {
                     $( $variable : $variable_ty = $variable_default; )*
                 ); )?
 
-                Err($crate::OptionError::Unknown(_name.to_string()))
+                Err($crate::OptionViolation::Unknown(_name.to_string()))
             }
 
             fn print_options(&self) {
@@ -157,7 +157,7 @@ macro_rules! define_strategy_params {
 
                 $( $crate::__params_print_buttons!($( $button_key, )*); )?
 
-                #[cfg(feature = "tunable")]
+                #[cfg(not(feature = "release"))]
                 {
                     $( $crate::__params_print_tunable_options!(self;
                         $( $tunable : $tunable_ty => $tunable_default, $tunable_min, $tunable_max, $tunable_c, $tunable_r; )*
@@ -166,13 +166,13 @@ macro_rules! define_strategy_params {
             }
 
             fn print_tunables(&self) {
-                #[cfg(feature = "tunable")]
+                #[cfg(not(feature = "release"))]
                 {
                     $( $crate::__params_print_tunables!(@live self;
                         $( $tunable : $tunable_ty => $tunable_default, $tunable_min, $tunable_max, $tunable_c, $tunable_r; )*
                     ); )?
                 }
-                #[cfg(not(feature = "tunable"))]
+                #[cfg(feature = "release")]
                 {
                     $( $crate::__params_print_tunables!(@default
                         $( $tunable : $tunable_ty => $tunable_default, $tunable_min, $tunable_max, $tunable_c, $tunable_r; )*

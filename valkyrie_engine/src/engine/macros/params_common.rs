@@ -44,15 +44,18 @@ macro_rules! __params_set_options {
                 return match $value.parse::<$ty>() {
                     Ok(new_value) => {
                         $(
-                            if !($min..=$max).contains(&new_value) {
-                                return Err($crate::OptionError::OutOfRange {
+                            let (min, max): ($ty, $ty) = ($min, $max);
+                            if !(min..=max).contains(&new_value) {
+                                return Err($crate::OptionViolation::OutOfRange {
                                     name: $name.to_string(),
                                     value: $value.to_string(),
+                                    min: min.to_string(),
+                                    max: max.to_string(),
                                 });
                             }
                         )?
                         if $self_.$field == new_value {
-                            return Err($crate::OptionError::Unchanged {
+                            return Err($crate::OptionViolation::Unchanged {
                                 name: $name.to_string(),
                                 value: $value.to_string(),
                             });
@@ -60,7 +63,10 @@ macro_rules! __params_set_options {
                         $self_.$field = new_value;
                         Ok(())
                     }
-                    Err(_) => Err($crate::OptionError::InvalidValue {
+                    Err(_) if $value.is_empty() => Err($crate::OptionViolation::MissingValue {
+                        name: $name.to_string(),
+                    }),
+                    Err(_) => Err($crate::OptionViolation::InvalidValue {
                         name: $name.to_string(),
                         value: $value.to_string(),
                     }),
@@ -91,14 +97,17 @@ macro_rules! __params_set_tunables {
             if $name.eq_ignore_ascii_case(stringify!($field)) {
                 return match $value.parse::<$ty>() {
                     Ok(new_value) => {
-                        if !($min..=$max).contains(&new_value) {
-                            return Err($crate::OptionError::OutOfRange {
+                        let (min, max): ($ty, $ty) = ($min, $max);
+                        if !(min..=max).contains(&new_value) {
+                            return Err($crate::OptionViolation::OutOfRange {
                                 name: $name.to_string(),
                                 value: $value.to_string(),
+                                min: min.to_string(),
+                                max: max.to_string(),
                             });
                         }
                         if $self_.$field == new_value {
-                            return Err($crate::OptionError::Unchanged {
+                            return Err($crate::OptionViolation::Unchanged {
                                 name: $name.to_string(),
                                 value: $value.to_string(),
                             });
@@ -106,7 +115,10 @@ macro_rules! __params_set_tunables {
                         $self_.$field = new_value;
                         Ok(())
                     }
-                    Err(_) => Err($crate::OptionError::InvalidValue {
+                    Err(_) if $value.is_empty() => Err($crate::OptionViolation::MissingValue {
+                        name: $name.to_string(),
+                    }),
+                    Err(_) => Err($crate::OptionViolation::InvalidValue {
                         name: $name.to_string(),
                         value: $value.to_string(),
                     }),
@@ -128,7 +140,10 @@ macro_rules! __params_set_variables {
                         $self_.$field = new_value;
                         Ok(())
                     }
-                    Err(_) => Err($crate::OptionError::InvalidValue {
+                    Err(_) if $value.is_empty() => Err($crate::OptionViolation::MissingValue {
+                        name: $name.to_string(),
+                    }),
+                    Err(_) => Err($crate::OptionViolation::InvalidValue {
                         name: $name.to_string(),
                         value: $value.to_string(),
                     }),
@@ -243,13 +258,13 @@ macro_rules! __params_tunable_accessors {
     ($( $(#[$meta:meta])* $field:ident : $ty:ty => $default:expr, $min:expr, $max:expr, $c:expr, $r:expr; )*) => {
         $(
             $(#[$meta])*
-            #[cfg(feature = "tunable")]
+            #[cfg(not(feature = "release"))]
             pub const fn $field(&self) -> $ty {
                 self.$field
             }
 
             $(#[$meta])*
-            #[cfg(not(feature = "tunable"))]
+            #[cfg(feature = "release")]
             #[inline(always)]
             pub const fn $field(&self) -> $ty {
                 $default

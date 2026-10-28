@@ -34,10 +34,7 @@
     documentation.
 */
 
-use std::sync::atomic::{
-    AtomicU8,
-    Ordering,
-};
+use std::sync::atomic::{AtomicU8, Ordering};
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,6 +67,8 @@ impl AtomicSearchState {
 
     #[inline]
     pub fn transition(&self, from: SearchState, to: SearchState) {
-        let _ = self.0.compare_exchange(from as u8, to as u8, Ordering::Relaxed, Ordering::Relaxed);
+        let _ = self
+            .0
+            .compare_exchange(from as u8, to as u8, Ordering::Relaxed, Ordering::Relaxed);
     }
 }

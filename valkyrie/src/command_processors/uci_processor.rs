@@ -37,10 +37,12 @@
 use core::str;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use valkyrie_chess::{ChessBoard, ChessPosition, FEN, Side};
 use valkyrie_engine::prelude::*;
 
-use crate::input_wrapper::InputWrapper;
+use crate::{
+    command_processors::{go_args::parse_go, position_args::parse_position, print_violations},
+    input_wrapper::InputWrapper,
+};
 
 pub struct UciProcessor;
 impl UciProcessor {
@@ -80,73 +82,26 @@ impl UciProcessor {
     }
 
     fn position<C: EngineConfig>(args: &[&str], engine: &mut Engine<C>) {
-        if args.is_empty() {
-            println!("info string Incorrect command params");
-            return;
-        }
-
-        let mut idx = 0;
-
-        let fen = if args[idx] == "startpos" {
-            idx += 1;
-            FEN::start_position().to_string()
-        } else if args[idx] == "fen" {
-            idx += 1;
-            let mut fen_parts = Vec::with_capacity(6);
-            while idx < args.len() && args[idx] != "moves" {
-                fen_parts.push(args[idx]);
-                idx += 1;
+        match parse_position(args, engine.params().general().chess960()) {
+            Ok(position) => {
+                engine.set_position(&position);
+                engine.print("Position set successfully");
             }
-            fen_parts.join(" ")
-        } else {
-            println!("info string Invalid position command");
-            return;
-        };
-
-        let violations = FEN::validate_fen(&fen);
-        if !violations.is_empty() {
-            for violation in violations {
-                println!("info string Invalid FEN: {violation}");
-            }
-            return;
+            Err(violations) => print_violations(engine, &violations),
         }
-
-        let mut chess_position = ChessPosition::from(ChessBoard::from(&FEN::from(fen)));
-
-        if idx < args.len() && args[idx] == "moves" {
-            idx += 1;
-            for &mv_str in &args[idx..] {
-                let mut legal_move = false;
-                chess_position.board().clone().map_legal_moves(|legal_mv| {
-                    if mv_str == legal_mv.to_string(engine.params().general().chess960()) {
-                        legal_move = true;
-                        chess_position.make_move_no_mask(legal_mv);
-                    }
-                });
-
-                if !legal_move {
-                    println!("info string Illegal move: {}", mv_str);
-                    return;
-                }
-            }
-        }
-
-        engine.set_position(&chess_position);
-
-        println!("info string Position set successfully");
     }
 
     fn set_option<C: EngineConfig>(args: &[&str], engine: &mut Engine<C>) {
-        if args.len() < 2 || args[0] != "name" {
-            println!("info string Incorrect command params");
-            return;
-        }
+        let args = match args {
+            ["name", rest @ ..] => rest,
+            _ => &[],
+        };
 
         let mut name = Vec::new();
         let mut value = Vec::new();
         let mut is_value = false;
 
-        for &token in &args[1..] {
+        for &token in args {
             if token == "value" {
                 is_value = true;
                 continue;
@@ -162,28 +117,15 @@ impl UciProcessor {
         let name_str = name.join(" ");
         let value_str = value.join(" ");
 
-        let old_hash = engine.params().general().hash();
-
-        if let Err(msg) = engine.params_mut().set_option(&name_str, &value_str) {
-            println!("info string {msg}");
+        if let Err(violation) = engine.set_option(&name_str, &value_str) {
+            print_violations(engine, &[violation]);
             return;
         }
 
-        if name_str.eq_ignore_ascii_case("hash") {
-            let hash_size = engine.params().general().hash();
-            if hash_size != old_hash {
-                engine.tree_mut().resize(hash_size as usize);
-            }
-        }
-
-        if name_str.eq_ignore_ascii_case("clearhash") {
-            engine.tree_mut().clear();
-        }
-
         if is_value {
-            println!("info string Option {name_str} has been set to {value_str}");
+            engine.print(&format!("Option {name_str} has been set to {value_str}"));
         } else {
-            println!("info string Option {name_str} has been triggered");
+            engine.print(&format!("Option {name_str} has been triggered"));
         }
     }
 
@@ -195,9 +137,13 @@ impl UciProcessor {
     ) where
         C::Search: SearchStrategy<C>,
     {
-        let limits = args_to_search_limits(args, engine.position().board().side());
-
-        engine.tree_mut().clear();
+        let limits = match parse_go(args, engine.position().board().side()) {
+            Ok(limits) => limits,
+            Err(violations) => {
+                print_violations(engine, &violations);
+                return;
+            }
+        };
 
         std::thread::scope(|s| {
             let search = engine.spawn_search(s, &limits);
@@ -228,57 +174,4 @@ impl UciProcessor {
             }
         });
     }
-}
-
-fn args_to_search_limits(args: &[&str], stm: Side) -> SearchLimits {
-    let mut limits = SearchLimits::default();
-
-    for (idx, &arg) in args.iter().enumerate() {
-        match arg {
-            "wtime" => {
-                if args.len() > idx + 1 && stm == Side::WHITE {
-                    limits.set_time(args[idx + 1].parse::<u64>().ok());
-                }
-            }
-            "winc" => {
-                if args.len() > idx + 1 && stm == Side::WHITE {
-                    limits.set_increment(args[idx + 1].parse::<u64>().ok());
-                }
-            }
-            "btime" => {
-                if args.len() > idx + 1 && stm == Side::BLACK {
-                    limits.set_time(args[idx + 1].parse::<u64>().ok());
-                }
-            }
-            "binc" => {
-                if args.len() > idx + 1 && stm == Side::BLACK {
-                    limits.set_increment(args[idx + 1].parse::<u64>().ok());
-                }
-            }
-            "movestogo" => {
-                if args.len() > idx + 1 {
-                    limits.set_moves_to_go(args[idx + 1].parse::<u64>().ok());
-                }
-            }
-            "movetime" => {
-                if args.len() > idx + 1 {
-                    limits.set_move_time(args[idx + 1].parse::<u64>().ok());
-                }
-            }
-            "depth" => {
-                if args.len() > idx + 1 {
-                    limits.set_depth(args[idx + 1].parse::<u64>().ok());
-                }
-            }
-            "nodes" => {
-                if args.len() > idx + 1 {
-                    limits.set_nodes(args[idx + 1].parse::<u64>().ok());
-                }
-            }
-            "infinite" => limits.set_infinite(true),
-            _ => continue,
-        }
-    }
-
-    limits
 }

@@ -35,22 +35,47 @@
 */
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OptionError {
+pub enum OptionViolation {
+    MissingName,
     Unknown(String),
-    InvalidValue { name: String, value: String },
-    OutOfRange { name: String, value: String },
-    Unchanged { name: String, value: String },
+    MissingValue {
+        name: String,
+    },
+    InvalidValue {
+        name: String,
+        value: String,
+    },
+    OutOfRange {
+        name: String,
+        value: String,
+        min: String,
+        max: String,
+    },
+    Unchanged {
+        name: String,
+        value: String,
+    },
 }
 
-impl std::fmt::Display for OptionError {
+impl std::fmt::Display for OptionViolation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::MissingName => write!(f, "Missing option name"),
             Self::Unknown(name) => write!(f, "Unknown option '{name}'"),
+            Self::MissingValue { name } => write!(f, "Missing value for {name}"),
             Self::InvalidValue { name, value } => {
                 write!(f, "Incorrect value '{value}' for {name}")
             }
-            Self::OutOfRange { name, value } => {
-                write!(f, "Value '{value}' out of range for {name}")
+            Self::OutOfRange {
+                name,
+                value,
+                min,
+                max,
+            } => {
+                write!(
+                    f,
+                    "Value '{value}' out of range for {name}, expected {min} to {max}"
+                )
             }
             Self::Unchanged { name, value } => {
                 write!(f, "Value of {name} is already {value}")
@@ -59,7 +84,7 @@ impl std::fmt::Display for OptionError {
     }
 }
 
-impl std::error::Error for OptionError {}
+impl std::error::Error for OptionViolation {}
 
 pub trait UciOptionType {
     const UCI_TYPE: &'static str;
@@ -108,7 +133,7 @@ impl UciOptionType for String {
 
 pub trait StrategyParams: std::fmt::Debug + Clone + Send + Sync {
     fn new() -> Self;
-    fn set_option(&mut self, name: &str, value: &str) -> Result<(), OptionError>;
+    fn set_option(&mut self, name: &str, value: &str) -> Result<(), OptionViolation>;
     fn print_options(&self);
     fn print_tunables(&self);
 }
@@ -121,8 +146,8 @@ impl StrategyParams for EmptyParams {
         Self
     }
 
-    fn set_option(&mut self, name: &str, _value: &str) -> Result<(), OptionError> {
-        Err(OptionError::Unknown(name.to_string()))
+    fn set_option(&mut self, name: &str, _value: &str) -> Result<(), OptionViolation> {
+        Err(OptionViolation::Unknown(name.to_string()))
     }
 
     fn print_options(&self) {}

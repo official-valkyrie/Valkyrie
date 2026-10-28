@@ -39,5 +39,10 @@ use crate::{engine::policy_entry::PolicyEntry, prelude::*};
 crate::register_strategy!(classic_expansion);
 
 pub trait ExpansionStrategy<C: EngineConfig>: Strategy {
-    fn execute(policy_distribution: &mut [PolicyEntry], node: &C::Node, params: &Self::Params, engine: &Engine<C>);
+    fn execute(
+        policy_distribution: &mut [PolicyEntry],
+        node: &C::Node,
+        params: &Self::Params,
+        engine: &Engine<C>,
+    );
 }

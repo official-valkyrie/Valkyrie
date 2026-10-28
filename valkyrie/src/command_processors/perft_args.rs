@@ -34,41 +34,43 @@
     documentation.
 */
 
-use valkyrie_chess::Move;
-
-#[derive(Debug, Clone)]
-pub struct Pv {
-    moves: Vec<Move>,
-    score: f32,
-    visit_percent: f32,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PerftViolation {
+    InvalidDepth(String),
+    UnexpectedArgument(String),
 }
 
-impl Pv {
-    pub fn new(moves: Vec<Move>, score: f32, visit_percent: f32) -> Self {
-        Self {
-            moves,
-            score,
-            visit_percent,
+impl std::fmt::Display for PerftViolation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidDepth(depth) => write!(f, "Incorrect perft depth '{depth}'"),
+            Self::UnexpectedArgument(argument) => write!(f, "Unexpected argument '{argument}'"),
         }
     }
+}
 
-    #[inline]
-    pub fn moves(&self) -> &[Move] {
-        &self.moves
-    }
+pub fn parse_perft(args: &[&str]) -> Result<Option<u8>, Vec<PerftViolation>> {
+    let mut violations = Vec::new();
 
-    #[inline]
-    pub fn score(&self) -> f32 {
-        self.score
-    }
+    let depth = args.first().and_then(|depth| {
+        let parsed = depth.parse::<u8>().ok();
 
-    #[inline]
-    pub fn visit_percent(&self) -> f32 {
-        self.visit_percent
-    }
+        if parsed.is_none() {
+            violations.push(PerftViolation::InvalidDepth(depth.to_string()));
+        }
 
-    #[inline]
-    pub fn line_length(&self) -> usize {
-        self.moves.len()
+        parsed
+    });
+
+    violations.extend(
+        args.iter()
+            .skip(1)
+            .map(|arg| PerftViolation::UnexpectedArgument(arg.to_string())),
+    );
+
+    if violations.is_empty() {
+        Ok(depth)
+    } else {
+        Err(violations)
     }
 }

@@ -35,10 +35,7 @@
 */
 
 use valkyrie_engine::{
-    engine::tree::components::{
-        HasQ,
-        HasVisits,
-    },
+    engine::tree::components::{HasScore, HasVisits},
     prelude::*,
 };
 
@@ -52,7 +49,7 @@ impl<C: EngineConfig> Reporter<C> for MinimalReporter
 where
     C::BestMove: BestMoveStrategy<C>,
     C::Node: HasVisits,
-    C::Edge: HasQ + HasVisits,
+    C::Edge: HasScore + HasVisits,
 {
     fn search_ended(&self, stats: &SearchStats, engine: &Engine<C>) {
         UciReporter::print_report(stats, engine);

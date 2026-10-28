@@ -35,16 +35,7 @@
 */
 
 use valkyrie_chess::{
-    Bitboard,
-    ChessBoard,
-    ChessPosition,
-    FEN,
-    GameState,
-    Move,
-    MoveFlag,
-    Piece,
-    Side,
-    Square,
+    Bitboard, ChessBoard, ChessPosition, FEN, GameState, Move, MoveFlag, Piece, Side, Square,
 };
 
 #[test]
@@ -113,21 +104,31 @@ fn fifty_move_rule() {
 
 #[test]
 fn draw() {
-    let position = ChessPosition::from(ChessBoard::from(&FEN::from("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1")));
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from(
+        "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1",
+    )));
     assert_eq!(position.game_state(&position), GameState::Drew);
     assert!(position.is_draw(&position));
 
-    let position = ChessPosition::from(ChessBoard::from(&FEN::from("7k/6Q1/6K1/8/8/8/8/8 b - - 100 80")));
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from(
+        "7k/6Q1/6K1/8/8/8/8/8 b - - 100 80",
+    )));
     assert_eq!(position.game_state(&position), GameState::Lost(0));
     assert!(!position.is_draw(&position));
 
-    let position = ChessPosition::from(ChessBoard::from(&FEN::from("7k/8/6K1/8/8/8/8/R7 b - - 100 80")));
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from(
+        "7k/8/6K1/8/8/8/8/R7 b - - 100 80",
+    )));
     assert_eq!(position.game_state(&position), GameState::Drew);
 
-    let position = ChessPosition::from(ChessBoard::from(&FEN::from("7k/8/6K1/8/8/8/8/R7 b - - 99 80")));
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from(
+        "7k/8/6K1/8/8/8/8/R7 b - - 99 80",
+    )));
     assert_eq!(position.game_state(&position), GameState::Ongoing);
 
-    let position = ChessPosition::from(ChessBoard::from(&FEN::from("2k5/8/8/8/8/1B6/3K4/8 w - - 0 1")));
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from(
+        "2k5/8/8/8/8/1B6/3K4/8 w - - 0 1",
+    )));
     assert!(position.is_draw(&position));
 
     let knight_shuffle = [

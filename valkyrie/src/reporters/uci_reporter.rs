@@ -34,16 +34,10 @@
     documentation.
 */
 
-use std::sync::atomic::{
-    AtomicU64,
-    Ordering,
-};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use valkyrie_engine::{
-    engine::tree::components::{
-        HasQ,
-        HasVisits,
-    },
+    engine::tree::components::{HasGameState, HasScore, HasVisits},
     prelude::*,
 };
 
@@ -62,11 +56,17 @@ impl UciReporter {
     where
         C::BestMove: BestMoveStrategy<C>,
         C::Node: HasVisits,
-        C::Edge: HasQ + HasVisits,
+        C::Edge: HasScore + HasVisits,
     {
         let time = stats.elapsed_ms();
-        let pv = engine.tree().get_pv(0, engine);
-        let score = pv.as_ref().map_or(0, |pv| pv.score().as_cp());
+        let pv = engine.pv(0);
+        let state = pv
+            .as_ref()
+            .map_or_else(|| engine.tree().root_node().game_state(), Pv::state);
+        let score = match state.mate_in() {
+            Some(moves) => format!("mate {moves}"),
+            None => format!("cp {}", pv.as_ref().map_or(0, |pv| pv.score().cp())),
+        };
 
         let depth = stats.avg_depth();
         let max_depth = stats.max_depth();
@@ -75,10 +75,14 @@ impl UciReporter {
         let hashfull = 0;
         let pv_idx = 1;
         let chess960 = engine.params().general().chess960();
-        let pv_str: Vec<String> = pv.iter().flat_map(Pv::moves).map(|mv| mv.to_string(chess960)).collect();
+        let pv_str: Vec<String> = pv
+            .iter()
+            .flat_map(Pv::moves)
+            .map(|mv| mv.to_string(chess960))
+            .collect();
 
         println!(
-            "info depth {depth} seldepth {max_depth} score cp {score} time {time} nodes {nodes} nps {nps} hashfull {hashfull} multipv {pv_idx} pv {}",
+            "info depth {depth} seldepth {max_depth} score {score} time {time} nodes {nodes} nps {nps} hashfull {hashfull} multipv {pv_idx} pv {}",
             pv_str.join(" ")
         )
     }
@@ -94,18 +98,22 @@ impl UciReporter {
         stats.avg_depth() > self.last_avg_depth.load(Ordering::Relaxed)
             || stats.max_depth() > self.last_max_depth.load(Ordering::Relaxed)
             || (stats.iterations().is_multiple_of(INTERVAL_CHECK_THRESHOLD)
-                && stats.elapsed_ms() >= self.last_report_time.load(Ordering::Relaxed) + REPORT_INTERVAL)
+                && stats.elapsed_ms()
+                    >= self.last_report_time.load(Ordering::Relaxed) + REPORT_INTERVAL)
     }
 
     fn report<C: EngineConfig>(&self, stats: &SearchStats, engine: &Engine<C>)
     where
         C::BestMove: BestMoveStrategy<C>,
         C::Node: HasVisits,
-        C::Edge: HasQ + HasVisits,
+        C::Edge: HasScore + HasVisits,
     {
-        self.last_avg_depth.store(stats.avg_depth(), Ordering::Relaxed);
-        self.last_max_depth.store(stats.max_depth(), Ordering::Relaxed);
-        self.last_report_time.store(stats.elapsed_ms(), Ordering::Relaxed);
+        self.last_avg_depth
+            .store(stats.avg_depth(), Ordering::Relaxed);
+        self.last_max_depth
+            .store(stats.max_depth(), Ordering::Relaxed);
+        self.last_report_time
+            .store(stats.elapsed_ms(), Ordering::Relaxed);
 
         Self::print_report(stats, engine);
     }
@@ -115,12 +123,10 @@ impl<C: EngineConfig> Reporter<C> for UciReporter
 where
     C::BestMove: BestMoveStrategy<C>,
     C::Node: HasVisits,
-    C::Edge: HasQ + HasVisits,
+    C::Edge: HasScore + HasVisits,
 {
-    #[allow(unused_variables)]
     fn print(&self, msg: &str) {
-        #[cfg(feature = "debug")]
-        println!("info string {msg}")
+        println!("{msg}")
     }
 
     fn search_started(&self, _limits: &SearchLimits, _engine: &Engine<C>) {

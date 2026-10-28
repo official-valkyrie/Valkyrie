@@ -107,19 +107,7 @@ macro_rules! define_engine_config {
             GenericConfig< $( $s_assoc, )+ NodeSlot >: Buildable,
         {
             pub fn build(self) -> $crate::Engine<GenericConfig< $( $s_assoc, )+ NodeSlot >> {
-                let params = EngineParams::<GenericConfig< $( $s_assoc, )+ NodeSlot >>::new();
-                let hash_size = params.general().hash() as usize;
-                $crate::Engine {
-                    params,
-                    position: ::valkyrie_chess::ChessPosition::from(
-                        ::valkyrie_chess::ChessBoard::from(
-                            &::valkyrie_chess::FEN::start_position()
-                        )
-                    ),
-                    search_state: ::std::default::Default::default(),
-                    tree: $crate::engine::tree::Tree::new(hash_size),
-                    reporter: ::std::boxed::Box::new($crate::engine::NoReporter),
-                }
+                $crate::Engine::new(EngineParams::new())
             }
         }
 
@@ -147,18 +135,18 @@ macro_rules! define_engine_config {
                 }
             )+
 
-            pub fn set_option(&mut self, name: &str, value: &str) -> ::std::result::Result<(), $crate::OptionError> {
+            pub fn set_option(&mut self, name: &str, value: &str) -> ::std::result::Result<(), $crate::OptionViolation> {
                 match $crate::StrategyParams::set_option(&mut self.general, name, value) {
-                    Err($crate::OptionError::Unknown(_)) => {}
+                    Err($crate::OptionViolation::Unknown(_)) => {}
                     res => return res,
                 }
                 $(
                     match $crate::StrategyParams::set_option(&mut self.$s_method, name, value) {
-                        Err($crate::OptionError::Unknown(_)) => {}
+                        Err($crate::OptionViolation::Unknown(_)) => {}
                         res => return res,
                     }
                 )+
-                Err($crate::OptionError::Unknown(name.to_string()))
+                Err($crate::OptionViolation::Unknown(name.to_string()))
             }
 
             pub fn print_options(&self) {

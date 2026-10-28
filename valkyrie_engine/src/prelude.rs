@@ -43,12 +43,12 @@ pub use crate::engine::builder::{
 };
 
 pub use crate::engine::{
-    EmptyParams, NoReporter, OptionError, Reporter, SearchLimits, SearchStats, StrategyParams,
-    UciOptionType,
+    EmptyParams, NoReporter, OptionViolation, Pv, Reporter, SearchLimits, SearchStats,
+    StrategyParams, UciOptionType,
 };
 
-pub use crate::engine::tree::{AtomicNodeIndex, EdgeIndex, EdgesStore, NodeIndex, Pv, Tree};
+pub use crate::engine::tree::{AtomicNodeIndex, EdgeIndex, EdgesStore, NodeIndex, Tree};
 
-pub use crate::engine::tree::components::{EdgeType, HasComponent, NodeType};
+pub use crate::engine::tree::components::{EdgeType, HasComponent, NodeType, Score};
 
 pub use valkyrie_chess::Move;

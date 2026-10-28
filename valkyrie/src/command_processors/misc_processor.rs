@@ -39,6 +39,8 @@ use std::process::Command;
 use valkyrie_chess::DEFAULT_PERFT_DEPTH;
 use valkyrie_engine::prelude::*;
 
+use crate::command_processors::{perft_args::parse_perft, print_violations};
+
 pub struct MiscProcessor;
 impl MiscProcessor {
     pub fn execute<C: EngineConfig>(cmd: &str, engine: &Engine<C>) -> bool {
@@ -62,15 +64,17 @@ impl MiscProcessor {
     }
 
     fn perft<C: EngineConfig, const BULK: bool>(args: &[&str], engine: &Engine<C>) {
+        let depth = match parse_perft(args) {
+            Ok(depth) => depth,
+            Err(violations) => {
+                print_violations(engine, &violations);
+                return;
+            }
+        };
+
         println!();
 
         engine.position().board().draw_board();
-
-        let depth = if !args.is_empty() {
-            args[0].parse::<u8>().ok()
-        } else {
-            None
-        };
 
         println!("-----------------------------------------------------------");
         println!("  Running PERFT");

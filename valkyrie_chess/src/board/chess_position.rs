@@ -35,8 +35,7 @@
 */
 
 use crate::{
-    GameState,
-    Move,
+    GameState, Move,
     board::{chess_board::ChessBoard, move_history::MoveHistory},
 };
 
@@ -96,7 +95,10 @@ impl ChessPosition {
         let root_repetitions = root.history.get_repetitions(key);
         let search_repetitions = self.history.get_repetitions(key) - root_repetitions;
 
-        if root_repetitions >= 3 || search_repetitions >= 2 || root_repetitions + search_repetitions >= 3 {
+        if root_repetitions >= 3
+            || search_repetitions >= 2
+            || root_repetitions + search_repetitions >= 3
+        {
             GameState::Drew
         } else {
             GameState::Ongoing

@@ -42,34 +42,16 @@ pub mod nodes;
 pub(crate) mod edge_index;
 pub(crate) mod node_index;
 
-mod pv;
-
 use std::{
     ops::Index,
-    sync::atomic::{
-        AtomicUsize,
-        Ordering,
-    },
+    sync::atomic::{AtomicUsize, Ordering},
 };
 
-use components::{
-    HasChild,
-    HasMove,
-    HasQ,
-    HasVisits,
-    NodeType,
-};
+use components::{HasChild, NodeType};
 
 pub use edge_index::EdgeIndex;
 pub use edge_storage::EdgesStore;
-pub use node_index::{
-    AtomicNodeIndex,
-    NodeIndex,
-};
-pub use pv::Pv;
-use valkyrie_chess::Move;
-
-use crate::{Engine, EngineConfig, engine::builder::BestMoveStrategy};
+pub use node_index::{AtomicNodeIndex, NodeIndex};
 
 const AVERAGE_EDGES_PER_NODE: usize = 30;
 
@@ -94,10 +76,7 @@ impl<N: NodeType> Tree<N> {
             current_len: AtomicUsize::new(0),
         };
 
-        if let Some(root_idx) = tree.create_node() {
-            tree.root_idx.store(root_idx);
-        }
-
+        tree.clear();
         tree
     }
 
@@ -105,8 +84,10 @@ impl<N: NodeType> Tree<N> {
         *self = Self::new(size_in_mb)
     }
 
-    pub fn clear(&mut self) {
-        *self = Self::new(self.size_in_mb)
+    pub fn clear(&self) {
+        self.current_len.store(0, Ordering::Relaxed);
+        self.root_idx
+            .store(self.create_node().unwrap_or(NodeIndex::NULL));
     }
 
     pub fn root_index(&self) -> NodeIndex {
@@ -120,11 +101,11 @@ impl<N: NodeType> Tree<N> {
     pub fn len(&self) -> usize {
         self.current_len.load(Ordering::Relaxed)
     }
-    
+
     pub fn capacity(&self) -> usize {
         self.nodes.len()
     }
-    
+
     pub fn size_in_mb(&self) -> usize {
         self.size_in_mb
     }
@@ -151,7 +132,11 @@ impl<N: NodeType> Tree<N> {
         Some(child_idx)
     }
 
-    pub fn get_or_create_child(&self, node_idx: NodeIndex, edge_idx: EdgeIndex) -> Option<NodeIndex> {
+    pub fn get_or_create_child(
+        &self,
+        node_idx: NodeIndex,
+        edge_idx: EdgeIndex,
+    ) -> Option<NodeIndex> {
         let child_idx = self[node_idx].edges()[edge_idx].child();
 
         if child_idx == NodeIndex::NULL {
@@ -160,54 +145,9 @@ impl<N: NodeType> Tree<N> {
             Some(child_idx)
         }
     }
-
-    pub fn get_best_move<C: EngineConfig<Node = N>>(&self, engine: &Engine<C>) -> Move
-        where C::BestMove: BestMoveStrategy<C>
-    {
-        let root = self.root_node();
-
-        C::BestMove::execute(root, 0, engine.params().best_move(), engine)
-            .map_or(Move::NULL, |edge_idx| root.edges()[edge_idx].mv())
-    }
-
-    pub fn get_pv<C: EngineConfig<Node = N>>(&self, pv_idx: usize, engine: &Engine<C>) -> Option<Pv>
-    where
-        C::BestMove: BestMoveStrategy<C>,
-        N: HasVisits,
-        N::Edge: HasQ + HasVisits,
-    {
-        let root = self.root_node();
-        let root_edge = C::BestMove::execute(root, pv_idx, engine.params().best_move(), engine)?;
-
-        let (score, visit_percent) = {
-            let edges = root.edges();
-            let edge = &edges[root_edge];
-            (edge.q(), edge.visits() as f32 * 100.0 / root.visits().max(1) as f32)
-        };
-
-        let mut moves = Vec::new();
-        let mut node_idx = self.root_index();
-        let mut next_edge = Some(root_edge);
-
-        while let Some(edge_idx) = next_edge {
-            let edges = self[node_idx].edges();
-            let edge = &edges[edge_idx];
-
-            moves.push(edge.mv());
-
-            if !edge.has_child() {
-                break;
-            }
-
-            node_idx = edge.child();
-            next_edge = C::BestMove::execute(&self[node_idx], 0, engine.params().best_move(), engine);
-        }
-
-        Some(Pv::new(moves, score, visit_percent))
-    }
 }
 
-impl<N> Index<NodeIndex> for Tree<N>  {
+impl<N> Index<NodeIndex> for Tree<N> {
     type Output = N;
 
     fn index(&self, index: NodeIndex) -> &Self::Output {

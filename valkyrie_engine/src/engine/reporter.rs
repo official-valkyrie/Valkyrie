@@ -36,12 +36,7 @@
 
 use valkyrie_chess::Move;
 
-use crate::engine::{
-    Engine,
-    SearchLimits,
-    SearchStats,
-    builder::EngineConfig,
-};
+use crate::engine::{Engine, SearchLimits, SearchStats, builder::EngineConfig};
 
 pub trait Reporter<C: EngineConfig>: std::fmt::Debug + Send + Sync {
     fn print(&self, _msg: &str) {}

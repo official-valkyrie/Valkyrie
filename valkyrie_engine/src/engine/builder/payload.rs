@@ -36,9 +36,6 @@
 
 crate::register_strategy!(scalar);
 
-const EVAL_SCALE: f32 = 400.0;
-const SCORE_EPSILON: f32 = 0.0001;
-
 pub trait Payload: Sized + Copy + std::fmt::Debug + Send + Sync + 'static {
     const WIN: Self;
     const DRAW: Self;
@@ -52,12 +49,6 @@ pub trait Payload: Sized + Copy + std::fmt::Debug + Send + Sync + 'static {
         let mut result = *self;
         result.flip();
         result
-    }
-
-    #[inline]
-    fn as_cp(&self) -> i32 {
-        let score = self.as_scalar().clamp(SCORE_EPSILON, 1.0 - SCORE_EPSILON);
-        (-EVAL_SCALE * (1.0 / score - 1.0).ln()) as i32
     }
 }
 
