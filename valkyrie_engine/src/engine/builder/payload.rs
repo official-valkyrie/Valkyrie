@@ -34,7 +34,7 @@
     documentation.
 */
 
-crate::register_strategy!(scalar);
+mod scalar;
 
 pub trait Payload: Sized + Copy + std::fmt::Debug + Send + Sync + 'static {
     const WIN: Self;
