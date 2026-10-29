@@ -62,18 +62,19 @@ impl<C: EngineConfig> TimeManagerStrategy<C> for SimpleTimeManager {
             return time_manager;
         }
 
-        let time = limits.time().unwrap_or_default();
-
-        if time == 0 {
+        let Some(time) = limits.time() else {
             return time_manager;
-        }
+        };
 
         let increment = limits.increment().unwrap_or_default();
-        let mtg = limits.moves_to_go().unwrap_or(20);
+        let mtg = limits
+            .moves_to_go()
+            .filter(|&moves_to_go| moves_to_go > 0)
+            .unwrap_or(20);
+        let overhead = params.move_overhead() as u64;
 
-        let mut hard_limit = (time / mtg) + (increment / 2);
-        hard_limit = hard_limit.saturating_sub(params.move_overhead() as u64);
-        time_manager.hard_limit = Some(hard_limit);
+        let hard_limit = (time / mtg + increment / 2).min(time);
+        time_manager.hard_limit = Some(hard_limit.saturating_sub(overhead));
 
         time_manager
     }

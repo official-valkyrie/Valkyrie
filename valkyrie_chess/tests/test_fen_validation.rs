@@ -170,6 +170,7 @@ fn accepts_valid_fens() {
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -",
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR   w  KQkq  -  0  1",
         "4k3/8/8/8/8/8/8/4K3 b - - 99 120",
+        "4k3/8/8/8/8/8/8/4K3 b - - 100 120",
         "8/8/8/8/8/8/8/K6k w - - 0 1",
         "4k3/8/8/8/8/8/8/4K2r w - - 0 1",
         "r3k2r/8/8/8/8/8/8/R3K2R w Kq - 0 1",
@@ -533,6 +534,10 @@ fn reports_invalid_move_counters() {
         ),
         (
             "4k3/8/8/8/8/8/8/4K3 w - - 1.5 1",
+            FenViolation::InvalidHalfMoveClock,
+        ),
+        (
+            "4k3/8/8/8/8/8/8/4K3 w - - 101 1",
             FenViolation::InvalidHalfMoveClock,
         ),
         (

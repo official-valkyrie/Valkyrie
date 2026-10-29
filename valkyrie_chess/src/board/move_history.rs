@@ -36,11 +36,13 @@
 
 use crate::base_structures::ZobristKey;
 
+const HISTORY_CAPACITY: usize = crate::HALF_MOVE_LIMIT as usize + 1;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct MoveHistory([ZobristKey; 101], usize);
+pub struct MoveHistory([ZobristKey; HISTORY_CAPACITY], usize);
 impl MoveHistory {
     pub fn new() -> Self {
-        Self([ZobristKey::default(); 101], 0)
+        Self([ZobristKey::default(); HISTORY_CAPACITY], 0)
     }
 
     #[inline]

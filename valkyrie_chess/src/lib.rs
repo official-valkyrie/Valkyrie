@@ -58,6 +58,7 @@ pub use board::ChessBoard;
 pub use board::ChessPosition;
 
 pub const DEFAULT_PERFT_DEPTH: u8 = 5;
+pub const HALF_MOVE_LIMIT: u8 = 100;
 
 pub fn perft<const BULK: bool, const SPLIT: bool, const CHESS_960: bool>(
     board: &ChessBoard,
@@ -90,12 +91,12 @@ fn perft_internal_white<const BULK: bool, const SPLIT: bool, const CHESS_960: bo
 ) -> u64 {
     let mut node_count = 0u64;
 
-    if BULK && depth == 1 {
-        return board.count_legal_moves::<0>() as u64;
+    if depth == 0 {
+        return 1;
     }
 
-    if !BULK && depth == 0 {
-        return 1;
+    if BULK && depth == 1 {
+        return board.count_legal_moves::<0>() as u64;
     }
 
     board.map_legal_moves_templated::<_, 0>(|mv| {
@@ -119,12 +120,12 @@ fn perft_internal_black<const BULK: bool, const SPLIT: bool, const CHESS_960: bo
 ) -> u64 {
     let mut node_count = 0u64;
 
-    if BULK && depth == 1 {
-        return board.count_legal_moves::<1>() as u64;
+    if depth == 0 {
+        return 1;
     }
 
-    if !BULK && depth == 0 {
-        return 1;
+    if BULK && depth == 1 {
+        return board.count_legal_moves::<1>() as u64;
     }
 
     board.map_legal_moves_templated::<_, 1>(|mv| {

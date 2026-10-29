@@ -50,7 +50,6 @@ const VALUE_ARGUMENTS: [&str; 8] = [
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GoViolation {
-    UnknownArgument(String),
     MissingValue(String),
     InvalidValue { argument: String, value: String },
 }
@@ -58,7 +57,6 @@ pub enum GoViolation {
 impl std::fmt::Display for GoViolation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UnknownArgument(argument) => write!(f, "Unknown go argument '{argument}'"),
             Self::MissingValue(argument) => write!(f, "Missing value for {argument}"),
             Self::InvalidValue { argument, value } => {
                 write!(f, "Incorrect value '{value}' for {argument}")
@@ -82,7 +80,6 @@ pub fn parse_go(args: &[&str], side: Side) -> Result<SearchLimits, Vec<GoViolati
         }
 
         if !VALUE_ARGUMENTS.contains(&argument) {
-            violations.push(GoViolation::UnknownArgument(argument.to_string()));
             continue;
         }
 
@@ -93,8 +90,8 @@ pub fn parse_go(args: &[&str], side: Side) -> Result<SearchLimits, Vec<GoViolati
 
         idx += 1;
 
-        match value.parse::<u64>() {
-            Ok(value) => apply_limit(&mut limits, argument, value, side),
+        match value.parse::<i64>() {
+            Ok(value) => apply_limit(&mut limits, argument, value.max(0) as u64, side),
             Err(_) => violations.push(GoViolation::InvalidValue {
                 argument: argument.to_string(),
                 value: value.to_string(),

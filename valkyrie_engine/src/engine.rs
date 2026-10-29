@@ -194,7 +194,7 @@ impl<C: EngineConfig> Engine<C>
 where
     C::Search: SearchStrategy<C>,
 {
-    pub fn search(&self, limits: &SearchLimits) -> (Move, SearchStats) {
+    pub fn search(&self, limits: &SearchLimits) -> (Option<Move>, SearchStats) {
         self.search_state.set(SearchState::Running);
         self.run_search(limits)
     }
@@ -203,32 +203,61 @@ where
         &'env self,
         scope: &'scope Scope<'scope, 'env>,
         limits: &'env SearchLimits,
-    ) -> ScopedJoinHandle<'scope, (Move, SearchStats)> {
+    ) -> ScopedJoinHandle<'scope, (Option<Move>, SearchStats)> {
         self.search_state.set(SearchState::Running);
         scope.spawn(move || self.run_search(limits))
     }
 
-    fn run_search(&self, limits: &SearchLimits) -> (Move, SearchStats) {
+    fn run_search(&self, limits: &SearchLimits) -> (Option<Move>, SearchStats) {
+        let (best_move, stats) = self.choose_move(limits);
+
+        self.search_state
+            .transition(SearchState::Running, SearchState::Ended);
+
+        if let Some(best_move) = best_move {
+            if limits.is_infinite() {
+                self.wait_for_interrupt();
+            }
+
+            self.reporter.best_move(best_move, self);
+        }
+
+        self.search_state.set(SearchState::Idle);
+
+        (best_move, stats)
+    }
+
+    fn choose_move(&self, limits: &SearchLimits) -> (Option<Move>, SearchStats) {
+        let Some(first_move) = self.first_legal_move() else {
+            self.print("Illegal position: no legal moves");
+            return (None, SearchStats::new());
+        };
+
+        if self.position.game_state(&self.position) != GameState::Ongoing {
+            return (Some(first_move), SearchStats::new());
+        }
+
         self.tree.clear();
 
         self.reporter.search_started(limits, self);
 
         let (best_move, stats) = C::Search::execute(limits, self.params().search(), self);
 
-        self.search_state
-            .transition(SearchState::Running, SearchState::Ended);
-
         self.reporter.search_ended(&stats, self);
 
-        if limits.is_infinite() {
-            self.wait_for_interrupt();
-        }
+        (Some(best_move), stats)
+    }
 
-        self.reporter.best_move(best_move, self);
+    fn first_legal_move(&self) -> Option<Move> {
+        let mut first_move = None;
 
-        self.search_state.set(SearchState::Idle);
+        self.position.board().map_legal_moves(|mv| {
+            if first_move.is_none() {
+                first_move = Some(mv);
+            }
+        });
 
-        (best_move, stats)
+        first_move
     }
 
     fn wait_for_interrupt(&self) {

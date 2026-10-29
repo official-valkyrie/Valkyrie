@@ -34,7 +34,7 @@
     documentation.
 */
 
-use valkyrie_chess::{ChessBoard, ChessPosition, FEN, FenViolation, Move};
+use valkyrie_chess::{ChessBoard, ChessPosition, FEN, FenViolation, HALF_MOVE_LIMIT, Move};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PositionViolation {
@@ -43,6 +43,7 @@ pub enum PositionViolation {
     UnexpectedArgument(String),
     Fen(FenViolation),
     IllegalMove(String),
+    HalfMoveLimit(String),
 }
 
 impl std::fmt::Display for PositionViolation {
@@ -63,6 +64,10 @@ impl std::fmt::Display for PositionViolation {
             }
             Self::Fen(violation) => write!(f, "Invalid FEN: {violation}"),
             Self::IllegalMove(mv) => write!(f, "Illegal move: {mv}"),
+            Self::HalfMoveLimit(mv) => write!(
+                f,
+                "Move {mv} takes the half-move clock above {HALF_MOVE_LIMIT}"
+            ),
         }
     }
 }
@@ -101,13 +106,17 @@ pub fn parse_position(
     let mut position = ChessPosition::from(ChessBoard::from(&FEN::from(fen)));
 
     for &mv_str in moves {
-        match find_legal_move(position.board(), mv_str, chess960) {
-            Some(mv) => position.make_move_no_mask(mv),
-            None => {
-                violations.push(PositionViolation::IllegalMove(mv_str.to_string()));
-                break;
-            }
+        let Some(mv) = find_legal_move(position.board(), mv_str, chess960) else {
+            violations.push(PositionViolation::IllegalMove(mv_str.to_string()));
+            break;
+        };
+
+        if half_moves_after(position.board(), mv) > HALF_MOVE_LIMIT {
+            violations.push(PositionViolation::HalfMoveLimit(mv_str.to_string()));
+            break;
         }
+
+        position.make_move_no_mask(mv);
     }
 
     if violations.is_empty() {
@@ -115,6 +124,12 @@ pub fn parse_position(
     } else {
         Err(violations)
     }
+}
+
+fn half_moves_after(board: &ChessBoard, mv: Move) -> u8 {
+    let mut board = *board;
+    board.make_move_no_mask(mv);
+    board.half_moves()
 }
 
 fn find_legal_move(board: &ChessBoard, mv_str: &str, chess960: bool) -> Option<Move> {

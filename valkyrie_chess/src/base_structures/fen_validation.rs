@@ -117,7 +117,11 @@ impl Display for FenViolation {
                 "no pawn could have just moved past the en passant square"
             ),
             Self::InvalidHalfMoveClock => {
-                write!(formatter, "half-move clock must be a number from 0 to 255")
+                write!(
+                    formatter,
+                    "half-move clock must be a number from 0 to {}",
+                    crate::HALF_MOVE_LIMIT
+                )
             }
             Self::InvalidFullMoveNumber => write!(
                 formatter,
@@ -160,10 +164,11 @@ impl FEN {
             violations.push(FenViolation::OpponentInCheck);
         }
 
-        if fen_parts
-            .get(4)
-            .is_some_and(|half_moves| half_moves.parse::<u8>().is_err())
-        {
+        if fen_parts.get(4).is_some_and(|half_moves| {
+            !half_moves
+                .parse::<u8>()
+                .is_ok_and(|number| number <= crate::HALF_MOVE_LIMIT)
+        }) {
             violations.push(FenViolation::InvalidHalfMoveClock);
         }
 
