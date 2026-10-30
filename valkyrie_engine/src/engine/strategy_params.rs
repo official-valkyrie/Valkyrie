@@ -86,53 +86,81 @@ impl std::fmt::Display for OptionViolation {
 
 impl std::error::Error for OptionViolation {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OptionKind {
+    Spin,
+    Check,
+    String,
+    Button,
+}
+
+impl OptionKind {
+    pub const fn uci_name(self) -> &'static str {
+        match self {
+            Self::Spin => "spin",
+            Self::Check => "check",
+            Self::String => "string",
+            Self::Button => "button",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OptionSpec {
+    pub name: String,
+    pub kind: OptionKind,
+    pub default: String,
+    pub range: Option<(String, String)>,
+    pub tunable: bool,
+}
+
 pub trait UciOptionType {
-    const UCI_TYPE: &'static str;
+    const KIND: OptionKind;
     const TUNE_KIND: &'static str;
 }
 
 impl UciOptionType for bool {
-    const UCI_TYPE: &'static str = "check";
+    const KIND: OptionKind = OptionKind::Check;
     const TUNE_KIND: &'static str = "int";
 }
 
 impl UciOptionType for i32 {
-    const UCI_TYPE: &'static str = "spin";
+    const KIND: OptionKind = OptionKind::Spin;
     const TUNE_KIND: &'static str = "int";
 }
 
 impl UciOptionType for i64 {
-    const UCI_TYPE: &'static str = "spin";
+    const KIND: OptionKind = OptionKind::Spin;
     const TUNE_KIND: &'static str = "int";
 }
 
 impl UciOptionType for u32 {
-    const UCI_TYPE: &'static str = "spin";
+    const KIND: OptionKind = OptionKind::Spin;
     const TUNE_KIND: &'static str = "int";
 }
 
 impl UciOptionType for u64 {
-    const UCI_TYPE: &'static str = "spin";
+    const KIND: OptionKind = OptionKind::Spin;
     const TUNE_KIND: &'static str = "int";
 }
 
 impl UciOptionType for usize {
-    const UCI_TYPE: &'static str = "spin";
+    const KIND: OptionKind = OptionKind::Spin;
     const TUNE_KIND: &'static str = "int";
 }
 
 impl UciOptionType for f32 {
-    const UCI_TYPE: &'static str = "string";
+    const KIND: OptionKind = OptionKind::String;
     const TUNE_KIND: &'static str = "float";
 }
 
 impl UciOptionType for f64 {
-    const UCI_TYPE: &'static str = "string";
+    const KIND: OptionKind = OptionKind::String;
     const TUNE_KIND: &'static str = "float";
 }
 
 impl UciOptionType for String {
-    const UCI_TYPE: &'static str = "string";
+    const KIND: OptionKind = OptionKind::String;
     const TUNE_KIND: &'static str = "string";
 }
 
@@ -144,8 +172,8 @@ pub trait StrategyParams: std::fmt::Debug + Clone + Send + Sync {
 
     fn new() -> Self;
     fn set_option(&mut self, name: &str, value: &str) -> Result<(), OptionViolation>;
-    fn print_options(&self, print: &dyn Fn(&str));
-    fn print_tunable_options(&self, print: &dyn Fn(&str));
+    fn visit_options(&self, visit: &dyn Fn(&OptionSpec));
+    fn visit_tunable_options(&self, visit: &dyn Fn(&OptionSpec));
     fn print_tunables(&self, print: &dyn Fn(&str));
 }
 
@@ -248,9 +276,9 @@ impl StrategyParams for EmptyParams {
         Err(OptionViolation::Unknown(name.to_string()))
     }
 
-    fn print_options(&self, _print: &dyn Fn(&str)) {}
+    fn visit_options(&self, _visit: &dyn Fn(&OptionSpec)) {}
 
-    fn print_tunable_options(&self, _print: &dyn Fn(&str)) {}
+    fn visit_tunable_options(&self, _visit: &dyn Fn(&OptionSpec)) {}
 
     fn print_tunables(&self, _print: &dyn Fn(&str)) {}
 }

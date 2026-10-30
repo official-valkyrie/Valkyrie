@@ -34,59 +34,107 @@
     documentation.
 */
 
-use core::str;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use valkyrie_engine::prelude::*;
 
 use crate::{
     command_processors::{go_args::parse_go, position_args::parse_position, print_violations},
-    input_wrapper::InputWrapper,
+    commands::{Category, Command, Shell},
+    input::Poll,
 };
+
+const POLL_INTERVAL: Duration = Duration::from_millis(1);
 
 pub struct UciProcessor;
 impl UciProcessor {
-    pub fn execute<C: EngineConfig>(
-        cmd: &str,
-        shutdown_token: &AtomicBool,
-        input_wrapper: &mut InputWrapper,
-        engine: &mut Engine<C>,
-    ) -> bool
+    pub fn commands<C: EngineConfig>() -> Vec<Command<C>>
     where
         C::Search: SearchStrategy<C>,
         C::TimeManager: TimeManagerStrategy<C>,
         C::BestMove: BestMoveStrategy<C>,
     {
-        let tokens: Vec<&str> = cmd.split_whitespace().collect();
-
-        if tokens.len() == 0 {
-            return false;
-        }
-
-        match tokens[0] {
-            "uci" => Self::uci(engine),
-            "isready" => engine.display().ready(),
-            "position" => Self::position(&tokens[1..], engine),
-            "setoption" => Self::set_option(&tokens[1..], engine),
-            "quit" | "q" => shutdown_token.store(true, Ordering::SeqCst),
-            "go" => Self::go(&tokens[1..], engine, input_wrapper, shutdown_token),
-            _ => return false,
-        }
-
-        true
+        vec![
+            Command {
+                name: "uci",
+                aliases: &[],
+                category: Category::Uci,
+                cli: true,
+                usage: "uci",
+                description: "Print the engine name and options, then uciok",
+                run: Self::uci,
+            },
+            Command {
+                name: "isready",
+                aliases: &[],
+                category: Category::Uci,
+                cli: true,
+                usage: "isready",
+                description: "Answer readyok",
+                run: Self::is_ready,
+            },
+            Command {
+                name: "setoption",
+                aliases: &[],
+                category: Category::Uci,
+                cli: true,
+                usage: "setoption name <NAME> [value <VALUE>]",
+                description: "Set an option or press a button",
+                run: Self::set_option,
+            },
+            Command {
+                name: "position",
+                aliases: &[],
+                category: Category::Uci,
+                cli: true,
+                usage: "position startpos|fen <FEN> [moves <MOVES>...]",
+                description: "Set the current position",
+                run: Self::position,
+            },
+            Command {
+                name: "go",
+                aliases: &[],
+                category: Category::Uci,
+                cli: true,
+                usage: "go [LIMITS...]",
+                description: "Search the current position (wtime btime winc binc movestogo movetime depth nodes infinite)",
+                run: Self::go,
+            },
+            Command {
+                name: "quit",
+                aliases: &["q"],
+                category: Category::Uci,
+                cli: false,
+                usage: "quit",
+                description: "Exit the engine",
+                run: Self::quit,
+            },
+        ]
     }
 
-    fn uci<C: EngineConfig>(engine: &mut Engine<C>) {
+    fn uci<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
+        let engine = &shell.engine;
+
         engine
             .display()
             .identify(env!("ENGINE_NAME"), env!("CARGO_PKG_AUTHORS"));
         engine
             .params()
-            .print_options(&|line| engine.display().option(line));
+            .visit_options(&|spec| engine.display().option(spec));
         engine.display().handshake_done();
     }
 
-    fn position<C: EngineConfig>(args: &[&str], engine: &mut Engine<C>) {
+    fn is_ready<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
+        shell.engine.display().ready();
+    }
+
+    fn quit<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
+        shell.shutdown = true;
+    }
+
+    fn position<C: EngineConfig>(shell: &mut Shell<C>, args: &[&str]) {
+        let engine = &mut shell.engine;
+
         match parse_position(args, engine.params().general().chess960()) {
             Ok(position) => {
                 engine.set_position(&position);
@@ -96,7 +144,9 @@ impl UciProcessor {
         }
     }
 
-    fn set_option<C: EngineConfig>(args: &[&str], engine: &mut Engine<C>) {
+    fn set_option<C: EngineConfig>(shell: &mut Shell<C>, args: &[&str]) {
+        let engine = &mut shell.engine;
+
         let args = match args {
             ["name", rest @ ..] => rest,
             _ => &[],
@@ -134,16 +184,20 @@ impl UciProcessor {
         }
     }
 
-    fn go<C: EngineConfig>(
-        args: &[&str],
-        engine: &mut Engine<C>,
-        input_wrapper: &mut InputWrapper,
-        shutdown_token: &AtomicBool,
-    ) where
+    fn go<C: EngineConfig>(shell: &mut Shell<C>, args: &[&str])
+    where
         C::Search: SearchStrategy<C>,
         C::TimeManager: TimeManagerStrategy<C>,
         C::BestMove: BestMoveStrategy<C>,
     {
+        let Shell {
+            engine,
+            input,
+            shutdown,
+            ..
+        } = shell;
+        let engine = &*engine;
+
         let limits = match parse_go(args, engine.position().board().side()) {
             Ok(limits) => limits,
             Err(violations) => {
@@ -156,27 +210,26 @@ impl UciProcessor {
             let search = engine.spawn_search(s, &limits);
 
             while !search.is_finished() {
-                let cmd = match input_wrapper.get_input_no_queue() {
-                    Some(cmd) => cmd,
-                    None => {
-                        engine.stop();
-                        shutdown_token.store(true, Ordering::Relaxed);
-                        break;
+                match input.poll(POLL_INTERVAL) {
+                    Poll::Line(cmd) => match cmd.trim() {
+                        "isready" => engine.display().ready(),
+                        "stop" | "s" => {
+                            engine.stop();
+                            break;
+                        }
+                        "quit" | "q" => {
+                            engine.stop();
+                            *shutdown = true;
+                            break;
+                        }
+                        _ => input.push_back(cmd),
+                    },
+                    Poll::Idle => {}
+                    Poll::Closed => {
+                        if limits.is_infinite() {
+                            engine.stop();
+                        }
                     }
-                };
-
-                match cmd.trim() {
-                    "isready" => engine.display().ready(),
-                    "stop" | "s" => {
-                        engine.stop();
-                        break;
-                    }
-                    "quit" | "q" => {
-                        engine.stop();
-                        shutdown_token.store(true, Ordering::Relaxed);
-                        break;
-                    }
-                    _ => input_wrapper.push_back(cmd),
                 }
             }
         });

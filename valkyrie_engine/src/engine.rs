@@ -59,7 +59,8 @@ pub use search_limits::SearchLimits;
 pub use search_report::SearchReport;
 pub use search_stats::SearchStats;
 pub use strategy_params::{
-    EmptyParams, OptionNames, OptionViolation, StrategyParams, UciOptionType,
+    EmptyParams, OptionKind, OptionNames, OptionSpec, OptionViolation, StrategyParams,
+    UciOptionType,
 };
 
 use std::{

@@ -38,7 +38,7 @@ use std::time::Duration;
 
 use valkyrie_chess::{ChessBoard, Move};
 
-use crate::engine::{Engine, SearchContext, builder::EngineConfig};
+use crate::engine::{Engine, OptionSpec, SearchContext, builder::EngineConfig};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageLevel {
@@ -51,7 +51,7 @@ pub trait Display<C: EngineConfig>: std::fmt::Debug + Send + Sync {
 
     fn identify(&self, _name: &str, _author: &str) {}
 
-    fn option(&self, _description: &str) {}
+    fn option(&self, _spec: &OptionSpec) {}
 
     fn handshake_done(&self) {}
 

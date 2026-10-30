@@ -34,54 +34,63 @@
     documentation.
 */
 
-use std::io::stdin;
+use std::{
+    collections::VecDeque,
+    io::stdin,
+    sync::mpsc::{Receiver, RecvTimeoutError, channel},
+    thread,
+    time::Duration,
+};
 
-pub struct InputWrapper {
-    command_queue: Vec<String>,
+pub enum Poll {
+    Line(String),
+    Idle,
+    Closed,
 }
 
-impl Default for InputWrapper {
-    fn default() -> Self {
-        Self::new()
-    }
+pub struct Input {
+    receiver: Receiver<String>,
+    queue: VecDeque<String>,
 }
 
-impl InputWrapper {
-    pub fn new() -> Self {
+impl Input {
+    pub fn spawn() -> Self {
+        let (sender, receiver) = channel();
+
+        thread::spawn(move || {
+            let mut line = String::new();
+
+            while matches!(stdin().read_line(&mut line), Ok(read) if read > 0) {
+                if sender.send(line.trim().to_string()).is_err() {
+                    break;
+                }
+
+                line.clear();
+            }
+        });
+
         Self {
-            command_queue: Vec::new(),
+            receiver,
+            queue: VecDeque::new(),
         }
     }
 
-    pub fn get_input(&mut self) -> Option<String> {
-        if !self.command_queue.is_empty() {
-            let command = self.command_queue.first().unwrap().clone();
-            self.command_queue.remove(0);
-            return Some(command);
-        }
-
-        let mut input_command = String::new();
-
-        match stdin().read_line(&mut input_command) {
-            Ok(0) | Err(_) => return None,
-            _ => {}
-        }
-
-        Some(input_command.trim().to_string())
+    pub fn next(&mut self) -> Option<String> {
+        self.queue.pop_front().or_else(|| self.receiver.recv().ok())
     }
 
-    pub fn get_input_no_queue(&mut self) -> Option<String> {
-        let mut input_command = String::new();
-
-        match stdin().read_line(&mut input_command) {
-            Ok(0) | Err(_) => return None,
-            _ => {}
+    pub fn poll(&mut self, timeout: Duration) -> Poll {
+        match self.receiver.recv_timeout(timeout) {
+            Ok(line) => Poll::Line(line),
+            Err(RecvTimeoutError::Timeout) => Poll::Idle,
+            Err(RecvTimeoutError::Disconnected) => {
+                thread::sleep(timeout);
+                Poll::Closed
+            }
         }
-
-        Some(input_command.trim().to_string())
     }
 
-    pub fn push_back(&mut self, command: String) {
-        self.command_queue.push(command);
+    pub fn push_back(&mut self, line: String) {
+        self.queue.push_back(line);
     }
 }

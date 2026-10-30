@@ -159,11 +159,11 @@ macro_rules! define_engine_config {
                 Err($crate::OptionViolation::Unknown(name.to_string()))
             }
 
-            pub fn print_options(&self, print: &dyn Fn(&str)) {
-                $crate::StrategyParams::print_options(&self.general, print);
-                $( $crate::StrategyParams::print_options(&self.$s_method, print); )+
-                $crate::StrategyParams::print_tunable_options(&self.general, print);
-                $( $crate::StrategyParams::print_tunable_options(&self.$s_method, print); )+
+            pub fn visit_options(&self, visit: &dyn Fn(&$crate::OptionSpec)) {
+                $crate::StrategyParams::visit_options(&self.general, visit);
+                $( $crate::StrategyParams::visit_options(&self.$s_method, visit); )+
+                $crate::StrategyParams::visit_tunable_options(&self.general, visit);
+                $( $crate::StrategyParams::visit_tunable_options(&self.$s_method, visit); )+
             }
 
             pub fn print_tunables(&self, print: &dyn Fn(&str)) {

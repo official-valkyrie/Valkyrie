@@ -34,6 +34,7 @@
     documentation.
 */
 
+pub mod general_processor;
 pub mod go_args;
 pub mod misc_processor;
 pub mod perft_args;
@@ -43,6 +44,24 @@ pub mod uci_processor;
 use std::fmt::Display;
 
 use valkyrie_engine::prelude::*;
+
+use crate::commands::Registry;
+use general_processor::GeneralProcessor;
+use misc_processor::MiscProcessor;
+use uci_processor::UciProcessor;
+
+pub fn registry<C: EngineConfig>() -> Registry<C>
+where
+    C::Search: SearchStrategy<C>,
+    C::TimeManager: TimeManagerStrategy<C>,
+    C::BestMove: BestMoveStrategy<C>,
+{
+    let mut commands = UciProcessor::commands();
+    commands.extend(MiscProcessor::commands());
+    commands.extend(GeneralProcessor::commands());
+
+    Registry::new(commands)
+}
 
 pub fn print_violations<C: EngineConfig, V: Display>(engine: &Engine<C>, violations: &[V]) {
     for violation in violations {

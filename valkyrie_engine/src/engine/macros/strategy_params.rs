@@ -190,28 +190,28 @@ macro_rules! define_strategy_params {
                 Err($crate::OptionViolation::Unknown(_name.to_string()))
             }
 
-            fn print_options(&self, _print: &dyn Fn(&str)) {
-                $( $crate::__params_print_options!(self, _print;
+            fn visit_options(&self, _visit: &dyn Fn(&$crate::OptionSpec)) {
+                $( $crate::__params_visit_options!(self, _visit;
                     $( [$option_key] $option : $option_ty => $option_default $(, $option_min, $option_max)?; )*
                 ); )?
 
-                $( $crate::__params_print_buttons!(_print; $( $button_key, )*); )?
+                $( $crate::__params_visit_buttons!(_visit; $( $button_key, )*); )?
 
                 $(
-                    $( $crate::StrategyParams::print_options(&self.$inner_field, _print); )*
+                    $( $crate::StrategyParams::visit_options(&self.$inner_field, _visit); )*
                 )?
             }
 
-            fn print_tunable_options(&self, _print: &dyn Fn(&str)) {
+            fn visit_tunable_options(&self, _visit: &dyn Fn(&$crate::OptionSpec)) {
                 #[cfg(not(feature = "release"))]
                 {
-                    $( $crate::__params_print_tunable_options!(self, _print;
+                    $( $crate::__params_visit_tunable_options!(self, _visit;
                         $( $tunable : $tunable_ty => $tunable_default, $tunable_min, $tunable_max, $tunable_c, $tunable_r; )*
                     ); )?
                 }
 
                 $(
-                    $( $crate::StrategyParams::print_tunable_options(&self.$inner_field, _print); )*
+                    $( $crate::StrategyParams::visit_tunable_options(&self.$inner_field, _visit); )*
                 )?
             }
 

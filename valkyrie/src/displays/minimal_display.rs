@@ -55,8 +55,8 @@ where
         Display::<C>::identify(&self.0, name, author)
     }
 
-    fn option(&self, description: &str) {
-        Display::<C>::option(&self.0, description)
+    fn option(&self, spec: &OptionSpec) {
+        Display::<C>::option(&self.0, spec)
     }
 
     fn handshake_done(&self) {

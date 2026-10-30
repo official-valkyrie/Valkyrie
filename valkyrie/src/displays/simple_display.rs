@@ -125,8 +125,26 @@ where
         println!("id author {author}");
     }
 
-    fn option(&self, description: &str) {
-        println!("{description}")
+    fn option(&self, spec: &OptionSpec) {
+        let mut line = format!("option name {} type {}", spec.name, spec.kind.uci_name());
+
+        if spec.kind != OptionKind::Button {
+            let default = if spec.default.is_empty() {
+                "<empty>"
+            } else {
+                &spec.default
+            };
+
+            line += &format!(" default {default}");
+        }
+
+        if let Some((min, max)) = &spec.range
+            && (spec.kind == OptionKind::Spin || spec.tunable)
+        {
+            line += &format!(" min {min} max {max}");
+        }
+
+        println!("{line}")
     }
 
     fn handshake_done(&self) {

@@ -155,25 +155,21 @@ macro_rules! __params_set_variables {
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __params_print_options {
-    ($self_:ident, $print:ident;
+macro_rules! __params_visit_options {
+    ($self_:ident, $visit:ident;
      $( [$key:literal] $field:ident : $ty:ty => $default:expr $(, $min:expr, $max:expr)?; )*) => {
         $(
             {
-                let mut default_str = $self_.$field.to_string();
-                if default_str.is_empty() {
-                    default_str = "<empty>".to_string();
-                }
-                let uci_type = <$ty as $crate::UciOptionType>::UCI_TYPE;
-                let line = format!("option name {} type {uci_type} default {default_str}", $key);
-                $(
-                    let line = if uci_type == "spin" {
-                        format!("{line} min {} max {}", $min, $max)
-                    } else {
-                        line
-                    };
-                )?
-                $print(&line);
+                #[allow(unused_variables)]
+                let range: ::std::option::Option<(::std::string::String, ::std::string::String)> = None;
+                $( let range = Some(($min.to_string(), $max.to_string())); )?
+                $visit(&$crate::OptionSpec {
+                    name: $key.to_string(),
+                    kind: <$ty as $crate::UciOptionType>::KIND,
+                    default: $self_.$field.to_string(),
+                    range,
+                    tunable: false,
+                });
             }
         )*
     };
@@ -181,28 +177,33 @@ macro_rules! __params_print_options {
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __params_print_buttons {
-    ($print:ident; $( $key:literal, )*) => {
+macro_rules! __params_visit_buttons {
+    ($visit:ident; $( $key:literal, )*) => {
         $(
-            $print(&format!("option name {} type button", $key));
+            $visit(&$crate::OptionSpec {
+                name: $key.to_string(),
+                kind: $crate::OptionKind::Button,
+                default: ::std::string::String::new(),
+                range: None,
+                tunable: false,
+            });
         )*
     };
 }
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __params_print_tunable_options {
-    ($self_:ident, $print:ident;
+macro_rules! __params_visit_tunable_options {
+    ($self_:ident, $visit:ident;
      $( $field:ident : $ty:ty => $default:expr, $min:expr, $max:expr, $c:expr, $r:expr; )*) => {
         $(
-            $print(&format!(
-                "option name {} type {} default {} min {} max {}",
-                stringify!($field),
-                <$ty as $crate::UciOptionType>::UCI_TYPE,
-                $self_.$field,
-                $min,
-                $max
-            ));
+            $visit(&$crate::OptionSpec {
+                name: stringify!($field).to_string(),
+                kind: <$ty as $crate::UciOptionType>::KIND,
+                default: $self_.$field.to_string(),
+                range: Some(($min.to_string(), $max.to_string())),
+                tunable: true,
+            });
         )*
     };
 }

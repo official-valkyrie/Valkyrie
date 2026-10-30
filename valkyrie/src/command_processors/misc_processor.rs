@@ -34,36 +34,92 @@
     documentation.
 */
 
-use std::process::Command;
+use std::process::Command as Process;
 
 use valkyrie_chess::DEFAULT_PERFT_DEPTH;
 use valkyrie_engine::prelude::*;
 
-use crate::command_processors::{perft_args::parse_perft, print_violations};
+use crate::{
+    command_processors::{perft_args::parse_perft, print_violations},
+    commands::{Category, Command, Shell},
+};
 
 pub struct MiscProcessor;
 impl MiscProcessor {
-    pub fn execute<C: EngineConfig>(cmd: &str, engine: &Engine<C>) -> bool {
-        let tokens: Vec<&str> = cmd.split_whitespace().collect();
-
-        if tokens.len() == 0 {
-            return false;
-        }
-
-        match tokens[0] {
-            "draw" | "d" => engine.display().board(engine.position().board()),
-            "tunables" => engine.params().print_tunables(&|line| engine.print(line)),
-            "perft" => Self::perft::<_, true>(&tokens[1..], engine),
-            "perft_no_bulk" => Self::perft::<_, false>(&tokens[1..], engine),
-            "bench" => Self::bench(&tokens[1..], engine),
-            "clear" | "cls" => Self::clear_terminal_screen(),
-            _ => return false,
-        }
-
-        true
+    pub fn commands<C: EngineConfig>() -> Vec<Command<C>> {
+        vec![
+            Command {
+                name: "draw",
+                aliases: &["d"],
+                category: Category::Tools,
+                cli: true,
+                usage: "draw",
+                description: "Show the current board",
+                run: Self::draw,
+            },
+            Command {
+                name: "tunables",
+                aliases: &[],
+                category: Category::Tools,
+                cli: true,
+                usage: "tunables",
+                description: "Print the tunable parameters in tuner format",
+                run: Self::tunables,
+            },
+            Command {
+                name: "perft",
+                aliases: &[],
+                category: Category::Tools,
+                cli: true,
+                usage: "perft [DEPTH]",
+                description: "Count the legal-move tree with bulk counting",
+                run: Self::perft::<C, true>,
+            },
+            Command {
+                name: "perft_no_bulk",
+                aliases: &[],
+                category: Category::Tools,
+                cli: true,
+                usage: "perft_no_bulk [DEPTH]",
+                description: "Count the legal-move tree without bulk counting",
+                run: Self::perft::<C, false>,
+            },
+            Command {
+                name: "bench",
+                aliases: &[],
+                category: Category::Tools,
+                cli: true,
+                usage: "bench",
+                description: "Run the benchmark (not implemented yet)",
+                run: Self::bench,
+            },
+            Command {
+                name: "clear",
+                aliases: &["cls"],
+                category: Category::Tools,
+                cli: false,
+                usage: "clear",
+                description: "Clear the terminal",
+                run: Self::clear_terminal_screen,
+            },
+        ]
     }
 
-    fn perft<C: EngineConfig, const BULK: bool>(args: &[&str], engine: &Engine<C>) {
+    fn draw<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
+        let engine = &shell.engine;
+
+        engine.display().board(engine.position().board());
+    }
+
+    fn tunables<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
+        let engine = &shell.engine;
+
+        engine.params().print_tunables(&|line| engine.print(line));
+    }
+
+    fn perft<C: EngineConfig, const BULK: bool>(shell: &mut Shell<C>, args: &[&str]) {
+        let engine = &shell.engine;
+
         let depth = match parse_perft(args) {
             Ok(depth) => depth,
             Err(violations) => {
@@ -84,18 +140,18 @@ impl MiscProcessor {
         engine.display().perft_finished(nodes, duration);
     }
 
-    fn bench<C: EngineConfig>(_args: &[&str], _engine: &Engine<C>) {}
+    fn bench<C: EngineConfig>(_shell: &mut Shell<C>, _args: &[&str]) {}
 
-    fn clear_terminal_screen() {
+    fn clear_terminal_screen<C: EngineConfig>(_shell: &mut Shell<C>, _args: &[&str]) {
         if cfg!(target_os = "windows") {
-            Command::new("cmd")
+            Process::new("cmd")
                 .args(["/c", "cls"])
                 .spawn()
                 .expect("cls command failed to start")
                 .wait()
                 .expect("failed to wait");
         } else {
-            Command::new("clear")
+            Process::new("clear")
                 .spawn()
                 .expect("clear command failed to start")
                 .wait()
