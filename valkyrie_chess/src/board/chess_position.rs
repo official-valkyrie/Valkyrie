@@ -43,6 +43,7 @@ use crate::{
 pub struct ChessPosition {
     board: ChessBoard,
     history: MoveHistory,
+    castle_mask: [u8; 64],
 }
 
 impl ChessPosition {
@@ -62,14 +63,8 @@ impl ChessPosition {
     }
 
     #[inline]
-    pub fn make_move_no_mask(&mut self, mv: Move) {
-        let mask = self.board.castle_rights().get_castle_mask();
-        self.make_move(mv, &mask);
-    }
-
-    #[inline]
-    pub fn make_move(&mut self, mv: Move, mask: &[u8; 64]) {
-        self.board.make_move(mv, mask);
+    pub fn make_move(&mut self, mv: Move) {
+        self.board.make_move_with_mask(mv, &self.castle_mask);
 
         if self.board.half_moves() == 0 {
             self.history.reset()
@@ -116,6 +111,7 @@ impl From<ChessBoard> for ChessPosition {
         let mut position = Self {
             board: value,
             history: MoveHistory::default(),
+            castle_mask: value.castle_rights().get_castle_mask(),
         };
 
         position.history.push(value.hash());

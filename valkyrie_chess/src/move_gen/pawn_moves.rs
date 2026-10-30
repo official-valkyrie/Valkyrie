@@ -296,12 +296,12 @@ fn handle_en_passant<F: FnMut(Move), const COLOR: u8>(
     pawns &= Attacks::get_pawn_attacks(en_passant_square, Side::from(COLOR).flipped());
 
     pawns.map(|from_square| {
-        let mut board = *board;
-        let mv = Move::from_squares(from_square, en_passant_square, MoveFlag::EN_PASSANT);
-        board.make_move_no_mask(mv);
-
-        if !board.is_square_attacked(board.king_square(Side::from(COLOR)), Side::from(COLOR)) {
-            apply_move(mv)
+        if is_legal_en_passant::<COLOR>(board, from_square) {
+            apply_move(Move::from_squares(
+                from_square,
+                en_passant_square,
+                MoveFlag::EN_PASSANT,
+            ))
         }
     });
 }
@@ -420,14 +420,25 @@ fn count_en_passant<const COLOR: u8>(board: &ChessBoard, mut pawns: Bitboard) ->
     let mut result = 0;
 
     pawns.map(|from_square| {
-        let mut board = *board;
-        let mv = Move::from_squares(from_square, en_passant_square, MoveFlag::EN_PASSANT);
-        board.make_move_no_mask(mv);
-
-        if !board.is_square_attacked(board.king_square(Side::from(COLOR)), Side::from(COLOR)) {
-            result += 1;
-        }
+        result += u32::from(is_legal_en_passant::<COLOR>(board, from_square));
     });
 
     result
+}
+
+fn is_legal_en_passant<const COLOR: u8>(board: &ChessBoard, from_square: Square) -> bool {
+    let side = Side::from(COLOR);
+    let en_passant_square = board.en_passant_square();
+    let captured_square = if COLOR == WHITE {
+        en_passant_square >> 8
+    } else {
+        en_passant_square << 8
+    };
+    let occupancy = board.occupancy()
+        ^ Bitboard::from(from_square)
+        ^ Bitboard::from(captured_square)
+        ^ Bitboard::from(en_passant_square);
+
+    (board.all_attackers_to_square_for_side(occupancy, board.king_square(side), side) & occupancy)
+        .is_empty()
 }

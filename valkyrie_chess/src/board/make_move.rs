@@ -37,12 +37,12 @@
 use crate::{ChessBoard, Move, MoveFlag, Piece, Side, Square};
 
 impl ChessBoard {
-    pub fn make_move_no_mask(&mut self, mv: Move) {
+    pub fn make_move(&mut self, mv: Move) {
         let mask = self.castle_rights().get_castle_mask();
-        self.make_move(mv, &mask);
+        self.make_move_with_mask(mv, &mask);
     }
 
-    pub fn make_move(&mut self, mv: Move, castle_mask: &[u8; 64]) {
+    pub fn make_move_with_mask(&mut self, mv: Move, castle_mask: &[u8; 64]) {
         let from = mv.from_square();
         let to = mv.to_square();
 

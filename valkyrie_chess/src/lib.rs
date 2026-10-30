@@ -82,7 +82,7 @@ pub fn perft<const BULK: bool>(
 
     board.map_legal_moves(|mv| {
         let mut board_copy = *board;
-        board_copy.make_move(mv, &mask);
+        board_copy.make_move_with_mask(mv, &mask);
         let result = count_child(&board_copy, depth - 1, &mask);
         node_count += result;
         on_root_move(mv, result);
@@ -99,7 +99,7 @@ fn perft_internal_white<const BULK: bool>(board: &ChessBoard, depth: u8, mask: &
     }
 
     if BULK && depth == 1 {
-        return board.count_legal_moves::<0>() as u64;
+        return board.count_legal_moves_templated::<0>() as u64;
     }
 
     board.map_legal_moves_templated::<_, 0>(|mv| {
@@ -119,7 +119,7 @@ fn perft_internal_black<const BULK: bool>(board: &ChessBoard, depth: u8, mask: &
     }
 
     if BULK && depth == 1 {
-        return board.count_legal_moves::<1>() as u64;
+        return board.count_legal_moves_templated::<1>() as u64;
     }
 
     board.map_legal_moves_templated::<_, 1>(|mv| {

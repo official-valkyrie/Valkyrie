@@ -128,7 +128,7 @@ pub fn parse_position(
             break;
         }
 
-        position.make_move_no_mask(mv);
+        position.make_move(mv);
     }
 
     if violations.is_empty() {
@@ -140,7 +140,7 @@ pub fn parse_position(
 
 fn half_moves_after(board: &ChessBoard, mv: Move) -> u8 {
     let mut board = *board;
-    board.make_move_no_mask(mv);
+    board.make_move(mv);
     board.half_moves()
 }
 

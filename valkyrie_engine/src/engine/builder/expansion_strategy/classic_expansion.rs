@@ -61,7 +61,7 @@ where
     ) {
         let mut edges = node.edges_mut();
 
-        if edges.len() > 0 {
+        if !edges.is_empty() {
             return;
         }
 
@@ -76,11 +76,11 @@ where
             total += entry.policy();
         }
 
-        for entry in policy_distribution.iter() {
+        edges.extend(policy_distribution.iter().map(|entry| {
             let edge = C::Edge::default();
             edge.set_mv(entry.mv());
             edge.set_policy(entry.policy() / total);
-            edges.push(edge);
-        }
+            edge
+        }));
     }
 }

@@ -42,7 +42,6 @@ use crate::{
 const PHASE_VALUES: [u8; 6] = [0, 1, 1, 2, 4, 0];
 
 #[repr(C)]
-#[repr(align(64))]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ChessBoard {
     occupancy: [Bitboard; 2],

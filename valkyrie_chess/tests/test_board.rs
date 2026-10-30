@@ -141,13 +141,13 @@ fn draw() {
     let root = ChessPosition::from(ChessBoard::from(&FEN::start_position()));
     let mut position = root;
     for (from, to) in knight_shuffle.iter().chain(&knight_shuffle[..1]) {
-        position.make_move_no_mask(Move::from_squares(*from, *to, MoveFlag::QUIET_MOVE));
+        position.make_move(Move::from_squares(*from, *to, MoveFlag::QUIET_MOVE));
     }
     assert!(position.is_draw(&root));
     assert!(!position.is_draw(&position));
 
     for (from, to) in knight_shuffle[1..].iter().chain(&knight_shuffle[..1]) {
-        position.make_move_no_mask(Move::from_squares(*from, *to, MoveFlag::QUIET_MOVE));
+        position.make_move(Move::from_squares(*from, *to, MoveFlag::QUIET_MOVE));
     }
     assert!(position.is_draw(&position));
 }
@@ -157,7 +157,7 @@ fn make_move() {
     let mut board = ChessBoard::from(&FEN::from(
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w HAha - 0 1",
     ));
-    board.make_move_no_mask(Move::from_squares(
+    board.make_move(Move::from_squares(
         Square::E2,
         Square::E4,
         MoveFlag::DOUBLE_PUSH,
@@ -171,7 +171,7 @@ fn make_move() {
     let mut board = ChessBoard::from(&FEN::from(
         "rnbqkbnr/ppp1pppp/8/8/3p4/8/PPPPPPPP/RNBQKBNR w HAha - 0 1",
     ));
-    board.make_move_no_mask(Move::from_squares(
+    board.make_move(Move::from_squares(
         Square::E2,
         Square::E4,
         MoveFlag::DOUBLE_PUSH,
@@ -194,7 +194,7 @@ fn make_move() {
     let mut board = ChessBoard::from(&FEN::from(
         "5rk1/P4pp1/7p/2pP4/8/8/4PPPP/2RR1K1R w HD c6 0 1",
     ));
-    board.make_move_no_mask(Move::from_squares(
+    board.make_move(Move::from_squares(
         Square::D5,
         Square::C6,
         MoveFlag::EN_PASSANT,
@@ -207,7 +207,7 @@ fn make_move() {
     let mut board = ChessBoard::from(&FEN::from(
         "5rk1/P4pp1/7p/2pP4/8/8/4PPPP/2RR1K1R w HD c6 0 1",
     ));
-    board.make_move_no_mask(Move::from_squares(
+    board.make_move(Move::from_squares(
         Square::F1,
         Square::H1,
         MoveFlag::KING_SIDE_CASTLE,
@@ -218,7 +218,7 @@ fn make_move() {
     );
 
     let mut board = ChessBoard::from(&FEN::from("5rk1/P4pp1/7p/2pP4/8/8/4PPPP/2RR1RK1 w - - 6 1"));
-    board.make_move_no_mask(Move::from_squares(
+    board.make_move(Move::from_squares(
         Square::A7,
         Square::A8,
         MoveFlag::ROOK_PROMOTION,
@@ -229,7 +229,7 @@ fn make_move() {
     );
 
     let mut board = ChessBoard::from(&FEN::from("5rk1/P4pp1/7p/2pP4/8/8/4PPPP/2RR1RK1 w - - 6 1"));
-    board.make_move_no_mask(Move::from_squares(
+    board.make_move(Move::from_squares(
         Square::C1,
         Square::A1,
         MoveFlag::QUIET_MOVE,
@@ -242,7 +242,7 @@ fn make_move() {
     let mut board = ChessBoard::from(&FEN::from(
         "5rk1/P4pp1/7p/3P4/2p5/8/4PPPP/R2R1K1R w HD - 0 2",
     ));
-    board.make_move_no_mask(Move::from_squares(
+    board.make_move(Move::from_squares(
         Square::F1,
         Square::D1,
         MoveFlag::QUEEN_SIDE_CASTLE,

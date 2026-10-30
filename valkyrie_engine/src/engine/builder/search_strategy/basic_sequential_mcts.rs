@@ -111,11 +111,11 @@ where
         let stats = self.context.stats();
 
         loop {
-            let position = engine.position().clone();
+            let mut position = *engine.position();
             self.depth = 0;
 
             if self
-                .search_step::<true>(engine.tree().root_index(), position)
+                .search_step::<true>(engine.tree().root_index(), &mut position)
                 .is_none()
             {
                 break;
@@ -134,7 +134,7 @@ where
     fn search_step<const ROOT: bool>(
         &mut self,
         current_node_idx: NodeIndex,
-        position: ChessPosition,
+        position: &mut ChessPosition,
     ) -> Option<<C::Simulation as SimulationStrategy<C>>::Output> {
         let engine = self.engine;
         let current_node = &engine.tree()[current_node_idx];
@@ -148,10 +148,10 @@ where
                 current_node.set_game_state(position.game_state(engine.position()));
             }
 
-            let payload = self.simulate_node(&[], current_node, &position);
+            let payload = self.simulate_node(&[], current_node, position);
 
             if current_node.visits() == 0 && !current_node.is_terminal() {
-                self.expand_node(current_node, &position);
+                self.expand_node(current_node, position);
             }
 
             (payload, None)
@@ -164,14 +164,11 @@ where
                 .get_or_create_child(current_node_idx, edge_idx)?;
             let mv = current_node.edges()[edge_idx].mv();
 
-            let mut position_clone = position.clone();
-            position_clone.make_move_no_mask(mv);
+            position.make_move(mv);
 
             self.depth = self.depth.saturating_add(1);
 
-            let payload_opt = self.search_step::<false>(child_idx, position_clone);
-
-            let payload = payload_opt?;
+            let payload = self.search_step::<false>(child_idx, position)?;
 
             (payload, Some(edge_idx))
         };
