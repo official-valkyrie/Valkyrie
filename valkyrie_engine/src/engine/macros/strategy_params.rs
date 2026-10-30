@@ -197,6 +197,12 @@ macro_rules! define_strategy_params {
 
                 $( $crate::__params_print_buttons!(_print; $( $button_key, )*); )?
 
+                $(
+                    $( $crate::StrategyParams::print_options(&self.$inner_field, _print); )*
+                )?
+            }
+
+            fn print_tunable_options(&self, _print: &dyn Fn(&str)) {
                 #[cfg(not(feature = "release"))]
                 {
                     $( $crate::__params_print_tunable_options!(self, _print;
@@ -205,7 +211,7 @@ macro_rules! define_strategy_params {
                 }
 
                 $(
-                    $( $crate::StrategyParams::print_options(&self.$inner_field, _print); )*
+                    $( $crate::StrategyParams::print_tunable_options(&self.$inner_field, _print); )*
                 )?
             }
 

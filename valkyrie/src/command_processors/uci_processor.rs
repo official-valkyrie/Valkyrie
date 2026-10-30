@@ -65,7 +65,7 @@ impl UciProcessor {
 
         match tokens[0] {
             "uci" => Self::uci(engine),
-            "isready" => println!("readyok"),
+            "isready" => engine.display().ready(),
             "position" => Self::position(&tokens[1..], engine),
             "setoption" => Self::set_option(&tokens[1..], engine),
             "quit" | "q" => shutdown_token.store(true, Ordering::SeqCst),
@@ -77,10 +77,13 @@ impl UciProcessor {
     }
 
     fn uci<C: EngineConfig>(engine: &mut Engine<C>) {
-        println!("id name {}", env!("ENGINE_NAME"));
-        println!("id author {}", env!("CARGO_PKG_AUTHORS"));
-        engine.params().print_options(&|line| println!("{line}"));
-        println!("uciok");
+        engine
+            .display()
+            .identify(env!("ENGINE_NAME"), env!("CARGO_PKG_AUTHORS"));
+        engine
+            .params()
+            .print_options(&|line| engine.display().option(line));
+        engine.display().handshake_done();
     }
 
     fn position<C: EngineConfig>(args: &[&str], engine: &mut Engine<C>) {
@@ -163,7 +166,7 @@ impl UciProcessor {
                 };
 
                 match cmd.trim() {
-                    "isready" => println!("readyok"),
+                    "isready" => engine.display().ready(),
                     "stop" | "s" => {
                         engine.stop();
                         break;

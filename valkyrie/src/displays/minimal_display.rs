@@ -34,5 +34,44 @@
     documentation.
 */
 
-pub mod minimal_reporter;
-pub mod uci_reporter;
+use valkyrie_engine::{
+    engine::tree::components::{HasScore, HasVisits},
+    prelude::*,
+};
+
+use crate::displays::simple_display::SimpleDisplay;
+
+#[allow(dead_code)]
+#[derive(Debug, Default)]
+pub struct MinimalDisplay(SimpleDisplay);
+
+impl<C: EngineConfig> Display<C> for MinimalDisplay
+where
+    C::BestMove: BestMoveStrategy<C>,
+    C::Node: HasVisits,
+    C::Edge: HasScore + HasVisits,
+{
+    fn identify(&self, name: &str, author: &str) {
+        Display::<C>::identify(&self.0, name, author)
+    }
+
+    fn option(&self, description: &str) {
+        Display::<C>::option(&self.0, description)
+    }
+
+    fn handshake_done(&self) {
+        Display::<C>::handshake_done(&self.0)
+    }
+
+    fn ready(&self) {
+        Display::<C>::ready(&self.0)
+    }
+
+    fn search_ended(&self, context: &SearchContext<C>, engine: &Engine<C>) {
+        self.0.search_ended(context, engine)
+    }
+
+    fn best_move(&self, mv: Move, engine: &Engine<C>) {
+        self.0.best_move(mv, engine)
+    }
+}

@@ -34,28 +34,49 @@
     documentation.
 */
 
-use valkyrie_engine::{
-    engine::tree::components::{HasScore, HasVisits},
-    prelude::*,
-};
+use std::time::Duration;
 
-use crate::reporters::uci_reporter::UciReporter;
+use valkyrie_chess::{ChessBoard, Move};
 
-#[allow(dead_code)]
-#[derive(Debug, Default)]
-pub struct MinimalReporter;
+use crate::engine::{Engine, SearchContext, builder::EngineConfig};
 
-impl<C: EngineConfig> Reporter<C> for MinimalReporter
-where
-    C::BestMove: BestMoveStrategy<C>,
-    C::Node: HasVisits,
-    C::Edge: HasScore + HasVisits,
-{
-    fn search_ended(&self, stats: &SearchStats, engine: &Engine<C>) {
-        UciReporter::print_report(stats, engine);
-    }
-
-    fn best_move(&self, mv: Move, engine: &Engine<C>) {
-        UciReporter::print_best_move(mv, engine);
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageLevel {
+    Info,
+    Error,
 }
+
+pub trait Display<C: EngineConfig>: std::fmt::Debug + Send + Sync {
+    fn message(&self, _level: MessageLevel, _text: &str) {}
+
+    fn identify(&self, _name: &str, _author: &str) {}
+
+    fn option(&self, _description: &str) {}
+
+    fn handshake_done(&self) {}
+
+    fn ready(&self) {}
+
+    fn board(&self, _board: &ChessBoard) {}
+
+    fn perft_started(&self, _board: &ChessBoard, _depth: u8, _bulk: bool) {}
+
+    fn perft_move(&self, _mv: Move, _nodes: u64, _engine: &Engine<C>) {}
+
+    fn perft_finished(&self, _nodes: u64, _elapsed: Duration) {}
+
+    fn bench_finished(&self, _nodes: u64, _elapsed: Duration) {}
+
+    fn search_started(&self, _context: &SearchContext<C>, _engine: &Engine<C>) {}
+
+    fn search_update(&self, _context: &SearchContext<C>, _engine: &Engine<C>) {}
+
+    fn search_ended(&self, _context: &SearchContext<C>, _engine: &Engine<C>) {}
+
+    fn best_move(&self, _mv: Move, _engine: &Engine<C>) {}
+}
+
+#[derive(Debug)]
+pub struct NoDisplay;
+
+impl<C: EngineConfig> Display<C> for NoDisplay {}

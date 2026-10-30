@@ -34,62 +34,53 @@
     documentation.
 */
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::{
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
+};
 
+use valkyrie_chess::ChessBoard;
 use valkyrie_engine::{
-    engine::tree::components::{HasScore, HasVisits},
+    engine::tree::components::{HasScore, HasVisits, Score},
     prelude::*,
 };
 
 const REPORT_INTERVAL: u64 = 1000;
 const INTERVAL_CHECK_THRESHOLD: u64 = 128;
+const PERFT_SEPARATOR: &str = "-----------------------------------------------------------";
 
 #[derive(Debug, Default)]
-pub struct UciReporter {
+pub struct SimpleDisplay {
     last_avg_depth: AtomicU64,
     last_max_depth: AtomicU64,
     last_report_time: AtomicU64,
 }
 
-impl UciReporter {
-    pub fn print_report<C: EngineConfig>(stats: &SearchStats, engine: &Engine<C>)
-    where
-        C::BestMove: BestMoveStrategy<C>,
-        C::Node: HasVisits,
-        C::Edge: HasScore + HasVisits,
-    {
-        let time = stats.elapsed_ms();
-        let depth = stats.avg_depth();
-        let max_depth = stats.max_depth();
-        let nodes = engine.reported_nodes(stats);
-        let nps = nodes as u128 * 1000 / time.max(1) as u128;
-        let hashfull = engine.tree().len() * 1000 / engine.tree().capacity().max(1);
-        let chess960 = engine.params().general().chess960();
-
-        let pvs = (0..)
-            .map_while(|pv_idx| engine.pv(pv_idx))
-            .take(engine.params().general().multi_pv());
-
-        for (pv_idx, pv) in pvs.enumerate() {
+impl SimpleDisplay {
+    fn print_report<S: Score>(report: &SearchReport<S>) {
+        for (pv_idx, pv) in report.lines.iter().enumerate() {
             let score = match pv.state().mate_in() {
                 Some(moves) => format!("mate {moves}"),
                 None => format!("cp {}", pv.score().cp()),
             };
-            let moves: Vec<String> = pv.moves().iter().map(|mv| mv.to_string(chess960)).collect();
+            let moves: Vec<String> = pv
+                .moves()
+                .iter()
+                .map(|mv| mv.to_string(report.chess960))
+                .collect();
 
             println!(
-                "info depth {depth} seldepth {max_depth} score {score} time {time} nodes {nodes} nps {nps} hashfull {hashfull} multipv {} pv {}",
+                "info depth {} seldepth {} score {score} time {} nodes {} nps {} hashfull {} multipv {} pv {}",
+                report.depth,
+                report.seldepth,
+                report.time_ms,
+                report.nodes,
+                report.nps,
+                report.hashfull,
                 pv_idx + 1,
                 moves.join(" ")
             )
         }
-    }
-
-    pub fn print_best_move<C: EngineConfig>(mv: Move, engine: &Engine<C>) {
-        println!(
-            "bestmove {}",
-            mv.to_string(engine.params().general().chess960())
-        )
     }
 
     fn should_report(&self, stats: &SearchStats) -> bool {
@@ -100,12 +91,14 @@ impl UciReporter {
                     >= self.last_report_time.load(Ordering::Relaxed) + REPORT_INTERVAL)
     }
 
-    fn report<C: EngineConfig>(&self, stats: &SearchStats, engine: &Engine<C>)
+    fn report<C: EngineConfig>(&self, context: &SearchContext<C>, engine: &Engine<C>)
     where
         C::BestMove: BestMoveStrategy<C>,
         C::Node: HasVisits,
         C::Edge: HasScore + HasVisits,
     {
+        let stats = context.stats();
+
         self.last_avg_depth
             .store(stats.avg_depth(), Ordering::Relaxed);
         self.last_max_depth
@@ -113,37 +106,99 @@ impl UciReporter {
         self.last_report_time
             .store(stats.elapsed_ms(), Ordering::Relaxed);
 
-        Self::print_report(stats, engine);
+        Self::print_report(&engine.report(context));
     }
 }
 
-impl<C: EngineConfig> Reporter<C> for UciReporter
+impl<C: EngineConfig> Display<C> for SimpleDisplay
 where
     C::BestMove: BestMoveStrategy<C>,
     C::Node: HasVisits,
     C::Edge: HasScore + HasVisits,
 {
-    fn print(&self, msg: &str) {
-        println!("{msg}")
+    fn message(&self, _level: MessageLevel, text: &str) {
+        println!("{text}")
     }
 
-    fn search_started(&self, _limits: &SearchLimits, _engine: &Engine<C>) {
+    fn identify(&self, name: &str, author: &str) {
+        println!("id name {name}");
+        println!("id author {author}");
+    }
+
+    fn option(&self, description: &str) {
+        println!("{description}")
+    }
+
+    fn handshake_done(&self) {
+        println!("uciok")
+    }
+
+    fn ready(&self) {
+        println!("readyok")
+    }
+
+    fn board(&self, board: &ChessBoard) {
+        println!("{board}")
+    }
+
+    fn perft_started(&self, board: &ChessBoard, depth: u8, bulk: bool) {
+        println!();
+        println!("{board}");
+        println!("{PERFT_SEPARATOR}");
+        println!("  Running PERFT");
+        println!("  Depth: {depth}");
+        println!("  Bulk: {bulk}");
+        println!("  PEXT: {}", cfg!(target_feature = "bmi2"));
+        println!("{PERFT_SEPARATOR}\n");
+    }
+
+    fn perft_move(&self, mv: Move, nodes: u64, engine: &Engine<C>) {
+        println!(
+            "  {} - {nodes}",
+            mv.to_string(engine.params().general().chess960())
+        )
+    }
+
+    fn perft_finished(&self, nodes: u64, elapsed: Duration) {
+        let milliseconds = elapsed.as_millis().max(1);
+
+        println!("\n{PERFT_SEPARATOR}");
+        println!(
+            "  Perft ended! {nodes} nodes, {milliseconds}ms, {} nps",
+            u128::from(nodes) * 1000 / milliseconds
+        );
+        println!("{PERFT_SEPARATOR}\n");
+    }
+
+    fn bench_finished(&self, nodes: u64, elapsed: Duration) {
+        let milliseconds = elapsed.as_millis().max(1);
+
+        println!(
+            "{nodes} nodes {} nps",
+            u128::from(nodes) * 1000 / milliseconds
+        );
+    }
+
+    fn search_started(&self, _context: &SearchContext<C>, _engine: &Engine<C>) {
         self.last_avg_depth.store(0, Ordering::Relaxed);
         self.last_max_depth.store(0, Ordering::Relaxed);
         self.last_report_time.store(0, Ordering::Relaxed);
     }
 
-    fn search_update(&self, stats: &SearchStats, engine: &Engine<C>) {
-        if self.should_report(stats) {
-            self.report(stats, engine);
+    fn search_update(&self, context: &SearchContext<C>, engine: &Engine<C>) {
+        if self.should_report(context.stats()) {
+            self.report(context, engine);
         }
     }
 
-    fn search_ended(&self, stats: &SearchStats, engine: &Engine<C>) {
-        self.report(stats, engine);
+    fn search_ended(&self, context: &SearchContext<C>, engine: &Engine<C>) {
+        self.report(context, engine);
     }
 
     fn best_move(&self, mv: Move, engine: &Engine<C>) {
-        Self::print_best_move(mv, engine);
+        println!(
+            "bestmove {}",
+            mv.to_string(engine.params().general().chess960())
+        )
     }
 }

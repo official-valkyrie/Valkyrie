@@ -64,7 +64,6 @@ crate::define_strategy_params! {
             ["Hash"] hash: i32 => 1024, 1, 524288;
             ["MultiPV"] multi_pv: usize => 1, 1, 256;
             ["UCI_Chess960"] chess960: bool => false;
-            ["ItersAsNodes"] iters_as_nodes: bool => true;
         }
         Buttons {
             "ClearHash",

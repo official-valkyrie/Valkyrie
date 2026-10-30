@@ -39,7 +39,7 @@ pub mod prelude;
 
 pub use engine::builder::{EngineBuilder, EngineConfig};
 pub use engine::{
-    EmptyParams, Engine, OptionNames, OptionViolation, Reporter, SearchLimits, SearchStats,
+    Display, EmptyParams, Engine, OptionNames, OptionViolation, SearchLimits, SearchStats,
     StrategyParams, UciOptionType,
 };
 

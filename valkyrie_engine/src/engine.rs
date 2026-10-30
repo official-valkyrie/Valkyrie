@@ -39,22 +39,24 @@ mod macros;
 pub mod builder;
 pub mod tree;
 
+mod display;
 mod payload;
 mod policy_entry;
 mod pv;
-mod reporter;
 mod search_context;
 mod search_limits;
+mod search_report;
 mod search_state;
 mod search_stats;
 mod strategy_params;
 
 pub use builder::{EngineBuilder, EngineConfig, EngineParams, GeneralParams, SearchStrategy};
+pub use display::{Display, MessageLevel, NoDisplay};
 pub use payload::{HasWdl, Payload, WinChance};
 pub use pv::Pv;
-pub use reporter::{NoReporter, Reporter};
 pub use search_context::SearchContext;
 pub use search_limits::SearchLimits;
+pub use search_report::SearchReport;
 pub use search_stats::SearchStats;
 pub use strategy_params::{
     EmptyParams, OptionNames, OptionViolation, StrategyParams, UciOptionType,
@@ -86,7 +88,7 @@ pub struct Engine<C: EngineConfig> {
     position: ChessPosition,
     search_state: AtomicSearchState,
     tree: Tree<C::Node>,
-    reporter: Box<dyn Reporter<C>>,
+    display: Box<dyn Display<C>>,
 }
 
 impl<C: EngineConfig> Engine<C> {
@@ -98,7 +100,7 @@ impl<C: EngineConfig> Engine<C> {
             position: ChessPosition::from(ChessBoard::from(&FEN::start_position())),
             search_state: AtomicSearchState::default(),
             tree,
-            reporter: Box::new(NoReporter),
+            display: Box::new(NoDisplay),
         }
     }
 
@@ -143,15 +145,6 @@ impl<C: EngineConfig> Engine<C> {
     }
 
     #[inline]
-    pub fn reported_nodes(&self, stats: &SearchStats) -> u64 {
-        if self.params.general().iters_as_nodes() {
-            stats.iterations()
-        } else {
-            stats.cumulative_depth()
-        }
-    }
-
-    #[inline]
     pub fn stop(&self) {
         self.search_state
             .transition(SearchState::Running, SearchState::Interrupted);
@@ -180,17 +173,22 @@ impl<C: EngineConfig> Engine<C> {
     }
 
     #[inline]
-    pub fn reporter(&self) -> &dyn Reporter<C> {
-        self.reporter.as_ref()
+    pub fn display(&self) -> &dyn Display<C> {
+        self.display.as_ref()
     }
 
-    pub fn set_reporter(&mut self, reporter: impl Reporter<C> + 'static) {
-        self.reporter = Box::new(reporter);
+    pub fn set_display(&mut self, display: impl Display<C> + 'static) {
+        self.display = Box::new(display);
     }
 
     #[inline]
-    pub fn print(&self, msg: &str) {
-        self.reporter.print(msg)
+    pub fn print(&self, text: &str) {
+        self.display.message(MessageLevel::Info, text)
+    }
+
+    #[inline]
+    pub fn print_error(&self, text: &str) {
+        self.display.message(MessageLevel::Error, text)
     }
 }
 
@@ -226,7 +224,7 @@ where
                 self.wait_for_interrupt();
             }
 
-            self.reporter.best_move(best_move, self);
+            self.display.best_move(best_move, self);
         }
 
         self.search_state.set(SearchState::Idle);
@@ -236,7 +234,7 @@ where
 
     fn choose_move(&self, context: &SearchContext<C>) -> Option<Move> {
         let Some(first_move) = self.first_legal_move() else {
-            self.print("Illegal position: no legal moves");
+            self.print_error("Illegal position: no legal moves");
             return None;
         };
 
@@ -246,11 +244,11 @@ where
 
         self.tree.clear();
 
-        self.reporter.search_started(context.limits(), self);
+        self.display.search_started(context, self);
 
         C::Search::execute(context, self.params().search(), self);
 
-        self.reporter.search_ended(context.stats(), self);
+        self.display.search_ended(context, self);
 
         Some(self.best_move().unwrap_or(first_move))
     }
@@ -326,6 +324,32 @@ where
 
         C::BestMove::execute(root, 0, self.params().best_move(), self)
             .map(|edge_idx| root.edges()[edge_idx].mv())
+    }
+
+    pub fn report(&self, context: &SearchContext<C>) -> SearchReport<<C::Edge as HasScore>::Score>
+    where
+        C::Node: HasVisits,
+        C::Edge: HasScore + HasVisits,
+    {
+        let stats = context.stats();
+        let time_ms = stats.elapsed_ms();
+        let nodes = stats.iterations();
+
+        SearchReport {
+            limits: context.limits().clone(),
+            root: *self.position.board(),
+            chess960: self.params.general().chess960(),
+            time_ms,
+            depth: stats.avg_depth(),
+            seldepth: stats.max_depth(),
+            nodes,
+            nps: (u128::from(nodes) * 1000 / u128::from(time_ms.max(1))) as u64,
+            hashfull: self.tree.len() * 1000 / self.tree.capacity().max(1),
+            lines: (0..)
+                .map_while(|pv_idx| self.pv(pv_idx))
+                .take(self.params.general().multi_pv())
+                .collect(),
+        }
     }
 
     pub fn pv(&self, pv_idx: usize) -> Option<Pv<<C::Edge as HasScore>::Score>>

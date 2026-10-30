@@ -34,23 +34,20 @@
     documentation.
 */
 
-use valkyrie_chess::Move;
+use valkyrie_chess::ChessBoard;
 
-use crate::engine::{Engine, SearchLimits, SearchStats, builder::EngineConfig};
+use crate::engine::{Pv, SearchLimits};
 
-pub trait Reporter<C: EngineConfig>: std::fmt::Debug + Send + Sync {
-    fn print(&self, _msg: &str) {}
-
-    fn search_started(&self, _limits: &SearchLimits, _engine: &Engine<C>) {}
-
-    fn search_update(&self, _stats: &SearchStats, _engine: &Engine<C>) {}
-
-    fn search_ended(&self, _stats: &SearchStats, _engine: &Engine<C>) {}
-
-    fn best_move(&self, _mv: Move, _engine: &Engine<C>) {}
+#[derive(Debug, Clone)]
+pub struct SearchReport<S> {
+    pub limits: SearchLimits,
+    pub root: ChessBoard,
+    pub chess960: bool,
+    pub time_ms: u64,
+    pub depth: u64,
+    pub seldepth: u64,
+    pub nodes: u64,
+    pub nps: u64,
+    pub hashfull: usize,
+    pub lines: Vec<Pv<S>>,
 }
-
-#[derive(Debug)]
-pub struct NoReporter;
-
-impl<C: EngineConfig> Reporter<C> for NoReporter {}

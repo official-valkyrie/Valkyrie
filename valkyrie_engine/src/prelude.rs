@@ -43,8 +43,9 @@ pub use crate::engine::builder::{
 };
 
 pub use crate::engine::{
-    EmptyParams, HasWdl, NoReporter, OptionViolation, Payload, Pv, Reporter, SearchContext,
-    SearchLimits, SearchStats, StrategyParams, UciOptionType, WinChance,
+    Display, EmptyParams, HasWdl, MessageLevel, NoDisplay, OptionViolation, Payload, Pv,
+    SearchContext, SearchLimits, SearchReport, SearchStats, StrategyParams, UciOptionType,
+    WinChance,
 };
 
 pub use crate::engine::tree::{AtomicNodeIndex, EdgeIndex, EdgesStore, NodeIndex, Tree};

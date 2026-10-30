@@ -35,15 +35,15 @@
 */
 
 mod command_processors;
+mod displays;
 mod input_wrapper;
-mod reporters;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use command_processors::misc_processor::MiscProcessor;
 use command_processors::uci_processor::UciProcessor;
+use displays::simple_display::SimpleDisplay;
 use input_wrapper::InputWrapper;
-use reporters::uci_reporter::UciReporter;
 use valkyrie_engine::engine::builder::backpropagation_strategy::BasicScalarBackpropagate;
 use valkyrie_engine::engine::builder::best_move_strategy::MaxQ;
 use valkyrie_engine::engine::builder::expansion_strategy::ClassicExpansion;
@@ -67,7 +67,7 @@ fn main() {
         .node::<ClassicNode<AvgScoreEdge>>()
         .build();
 
-    engine.set_reporter(UciReporter::default());
+    engine.set_display(SimpleDisplay::default());
 
     let shutdown_token = AtomicBool::new(false);
     let mut input_wrapper = InputWrapper::new();

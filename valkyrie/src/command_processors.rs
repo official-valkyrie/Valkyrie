@@ -46,6 +46,6 @@ use valkyrie_engine::prelude::*;
 
 pub fn print_violations<C: EngineConfig, V: Display>(engine: &Engine<C>, violations: &[V]) {
     for violation in violations {
-        engine.print(&violation.to_string());
+        engine.print_error(&violation.to_string());
     }
 }

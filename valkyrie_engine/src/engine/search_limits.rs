@@ -34,7 +34,7 @@
     documentation.
 */
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct SearchLimits {
     nodes: Option<u64>,
     depth: Option<u64>,

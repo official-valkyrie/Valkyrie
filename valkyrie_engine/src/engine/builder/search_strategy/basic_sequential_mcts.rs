@@ -123,7 +123,7 @@ where
 
             stats.add_iteration(self.depth);
 
-            engine.reporter().search_update(stats, engine);
+            engine.display().search_update(self.context, engine);
 
             if engine.should_stop(self.context) {
                 break;

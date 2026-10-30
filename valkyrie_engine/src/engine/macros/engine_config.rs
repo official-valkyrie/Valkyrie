@@ -162,6 +162,8 @@ macro_rules! define_engine_config {
             pub fn print_options(&self, print: &dyn Fn(&str)) {
                 $crate::StrategyParams::print_options(&self.general, print);
                 $( $crate::StrategyParams::print_options(&self.$s_method, print); )+
+                $crate::StrategyParams::print_tunable_options(&self.general, print);
+                $( $crate::StrategyParams::print_tunable_options(&self.$s_method, print); )+
             }
 
             pub fn print_tunables(&self, print: &dyn Fn(&str)) {

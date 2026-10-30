@@ -51,7 +51,7 @@ impl MiscProcessor {
         }
 
         match tokens[0] {
-            "draw" | "d" => engine.print(&engine.position().board().to_string()),
+            "draw" | "d" => engine.display().board(engine.position().board()),
             "tunables" => engine.params().print_tunables(&|line| engine.print(line)),
             "perft" => Self::perft::<_, true>(&tokens[1..], engine),
             "perft_no_bulk" => Self::perft::<_, false>(&tokens[1..], engine),
@@ -72,33 +72,16 @@ impl MiscProcessor {
             }
         };
 
-        engine.print("");
-        engine.print(&engine.position().board().to_string());
+        let depth = depth.unwrap_or(DEFAULT_PERFT_DEPTH);
+        let board = engine.position().board();
 
-        engine.print("-----------------------------------------------------------");
-        engine.print("  Running PERFT");
-        engine.print(&format!(
-            "  Depth: {}",
-            depth.unwrap_or(DEFAULT_PERFT_DEPTH)
-        ));
-        engine.print(&format!("  Bulk: {BULK}"));
-        engine.print(&format!("  PEXT: {}", cfg!(target_feature = "bmi2")));
-        engine.print("-----------------------------------------------------------\n");
+        engine.display().perft_started(board, depth, BULK);
 
-        let chess960 = engine.params().general().chess960();
-        let (result, duration) =
-            valkyrie_chess::perft::<BULK>(engine.position().board(), depth, |mv, nodes| {
-                engine.print(&format!("  {} - {nodes}", mv.to_string(chess960)))
-            });
+        let (nodes, duration) = valkyrie_chess::perft::<BULK>(board, Some(depth), |mv, nodes| {
+            engine.display().perft_move(mv, nodes, engine)
+        });
 
-        let miliseconds = duration.as_millis().max(1);
-
-        engine.print("\n-----------------------------------------------------------");
-        engine.print(&format!(
-            "  Perft ended! {result} nodes, {miliseconds}ms, {} nps",
-            result as u128 * 1000 / miliseconds
-        ));
-        engine.print("-----------------------------------------------------------\n");
+        engine.display().perft_finished(nodes, duration);
     }
 
     fn bench<C: EngineConfig>(_args: &[&str], _engine: &Engine<C>) {}

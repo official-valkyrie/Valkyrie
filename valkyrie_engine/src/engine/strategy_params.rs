@@ -145,6 +145,7 @@ pub trait StrategyParams: std::fmt::Debug + Clone + Send + Sync {
     fn new() -> Self;
     fn set_option(&mut self, name: &str, value: &str) -> Result<(), OptionViolation>;
     fn print_options(&self, print: &dyn Fn(&str));
+    fn print_tunable_options(&self, print: &dyn Fn(&str));
     fn print_tunables(&self, print: &dyn Fn(&str));
 }
 
@@ -248,6 +249,8 @@ impl StrategyParams for EmptyParams {
     }
 
     fn print_options(&self, _print: &dyn Fn(&str)) {}
+
+    fn print_tunable_options(&self, _print: &dyn Fn(&str)) {}
 
     fn print_tunables(&self, _print: &dyn Fn(&str)) {}
 }
