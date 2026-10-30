@@ -454,6 +454,33 @@ fn reports_unavailable_castling_rights() {
 }
 
 #[test]
+fn reports_duplicate_castling_wings() {
+    assert_all_report(&[
+        (
+            "4k3/8/8/8/8/8/8/R3K2R w KH - 0 1",
+            FenViolation::DuplicateCastlingWing('H'),
+        ),
+        (
+            "4k3/8/8/8/8/8/8/R3K2R w AQ - 0 1",
+            FenViolation::DuplicateCastlingWing('Q'),
+        ),
+        (
+            "4k3/8/8/8/8/8/8/4K1RR w HG - 0 1",
+            FenViolation::DuplicateCastlingWing('G'),
+        ),
+        (
+            "r3k2r/8/8/8/8/8/8/4K3 w kh - 0 1",
+            FenViolation::DuplicateCastlingWing('h'),
+        ),
+    ]);
+    assert_all_accepted(&[
+        "r3k2r/8/8/8/8/8/8/R3K2R w HAha - 0 1",
+        "4k3/8/8/8/8/8/8/R3K2R w KA - 0 1",
+        "1r2k1r1/8/8/8/8/8/8/1R2K1R1 w GBgb - 0 1",
+    ]);
+}
+
+#[test]
 fn reports_malformed_en_passant() {
     assert_all_report(&[
         (

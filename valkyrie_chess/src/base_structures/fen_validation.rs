@@ -54,6 +54,7 @@ pub enum FenViolation {
     OpponentInCheck,
     InvalidCastlingRights,
     UnavailableCastlingRight(char),
+    DuplicateCastlingWing(char),
     InvalidEnPassant,
     ImpossibleEnPassant,
     InvalidHalfMoveClock,
@@ -108,6 +109,10 @@ impl Display for FenViolation {
                     "castling right '{right}' needs a king and a matching rook on their home rank"
                 )
             }
+            Self::DuplicateCastlingWing(right) => write!(
+                formatter,
+                "castling right '{right}' is a second right on the same side of the king"
+            ),
             Self::InvalidEnPassant => write!(
                 formatter,
                 "en passant must be '-' or a square on rank 6 with white to move, rank 3 with black to move"
@@ -280,29 +285,38 @@ fn validate_castling_rights(
         return;
     };
 
+    let mut taken_wings = [false; 4];
+
     for right in field.chars() {
-        if !is_castling_available(squares, right) {
-            violations.push(FenViolation::UnavailableCastlingRight(right));
+        match castling_wing(squares, right) {
+            None => violations.push(FenViolation::UnavailableCastlingRight(right)),
+            Some(wing) if taken_wings[wing] => {
+                violations.push(FenViolation::DuplicateCastlingWing(right))
+            }
+            Some(wing) => taken_wings[wing] = true,
         }
     }
 }
 
-fn is_castling_available(squares: &[char; 64], right: char) -> bool {
+fn castling_wing(squares: &[char; 64], right: char) -> Option<usize> {
     let (king, rook, home_rank) = if right.is_ascii_uppercase() {
         ('K', 'R', &squares[..8])
     } else {
         ('k', 'r', &squares[56..])
     };
 
-    let Some(king_file) = home_rank.iter().position(|&symbol| symbol == king) else {
-        return false;
+    let king_file = home_rank.iter().position(|&symbol| symbol == king)?;
+
+    let (available, king_side) = match right.to_ascii_lowercase() {
+        'k' => (home_rank[king_file + 1..].contains(&rook), true),
+        'q' => (home_rank[..king_file].contains(&rook), false),
+        file => {
+            let rook_file = usize::from(file as u8 - b'a');
+            (home_rank[rook_file] == rook, rook_file > king_file)
+        }
     };
 
-    match right.to_ascii_lowercase() {
-        'k' => home_rank[king_file + 1..].contains(&rook),
-        'q' => home_rank[..king_file].contains(&rook),
-        file => home_rank[usize::from(file as u8 - b'a')] == rook,
-    }
+    available.then_some(2 * usize::from(right.is_ascii_lowercase()) + usize::from(king_side))
 }
 
 fn validate_en_passant(

@@ -34,9 +34,12 @@
     documentation.
 */
 
-use crate::engine::tree::components::{
-    ChildStore, HasQ, HasScore, HasScoreSum, HasVisits, MoveStore, PolicyStore, ScoreSumStore,
-    VisitsStore,
+use crate::engine::{
+    builder::WinChance,
+    tree::components::{
+        ChildStore, HasQ, HasScore, HasScoreSum, HasVisits, MoveStore, PolicyStore, ScoreSumStore,
+        VisitsStore,
+    },
 };
 
 crate::compose_edge! {
@@ -62,10 +65,10 @@ impl HasQ for AvgScoreEdge {
 }
 
 impl HasScore for AvgScoreEdge {
-    type Score = f32;
+    type Score = WinChance;
 
     #[inline]
-    fn score(&self) -> f32 {
-        self.q()
+    fn score(&self) -> WinChance {
+        WinChance::new(self.q())
     }
 }

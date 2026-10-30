@@ -42,6 +42,14 @@ impl ChessBoard {
         self.half_moves() >= crate::HALF_MOVE_LIMIT
     }
 
+    #[inline]
+    pub(crate) fn is_en_passant_capturable(&self, square: Square, mover: Side) -> bool {
+        (Attacks::get_pawn_attacks(square, mover)
+            & self.piece_mask(Piece::PAWN)
+            & self.occupancy_for_side(mover.flipped()))
+        .is_not_empty()
+    }
+
     pub fn is_insufficient_material(&self) -> bool {
         if (self.piece_mask(Piece::PAWN)
             | self.piece_mask(Piece::ROOK)

@@ -34,7 +34,9 @@
     documentation.
 */
 
-mod scalar;
+mod win_chance;
+
+pub use win_chance::WinChance;
 
 pub trait Payload: Sized + Copy + std::fmt::Debug + Send + Sync + 'static {
     const WIN: Self;

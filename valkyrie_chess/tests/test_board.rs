@@ -162,11 +162,34 @@ fn make_move() {
         Square::E4,
         MoveFlag::DOUBLE_PUSH,
     ));
+    assert_eq!(board.en_passant_square(), Square::NULL);
+    assert_eq!(
+        FEN::from(&board),
+        FEN::from("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b HAha - 0 1")
+    );
+
+    let mut board = ChessBoard::from(&FEN::from(
+        "rnbqkbnr/ppp1pppp/8/8/3p4/8/PPPPPPPP/RNBQKBNR w HAha - 0 1",
+    ));
+    board.make_move_no_mask(Move::from_squares(
+        Square::E2,
+        Square::E4,
+        MoveFlag::DOUBLE_PUSH,
+    ));
     assert_eq!(board.en_passant_square(), Square::E3);
     assert_eq!(
         FEN::from(&board),
-        FEN::from("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b HAha e3 0 1")
+        FEN::from("rnbqkbnr/ppp1pppp/8/8/3pP3/8/PPPP1PPP/RNBQKBNR b HAha e3 0 1")
     );
+
+    let start = ChessBoard::from(&FEN::from(
+        "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+    ));
+    let loaded = ChessBoard::from(&FEN::from(
+        "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+    ));
+    assert_eq!(loaded.en_passant_square(), Square::NULL);
+    assert_eq!(loaded.hash(), start.hash());
 
     let mut board = ChessBoard::from(&FEN::from(
         "5rk1/P4pp1/7p/2pP4/8/8/4PPPP/2RR1K1R w HD c6 0 1",

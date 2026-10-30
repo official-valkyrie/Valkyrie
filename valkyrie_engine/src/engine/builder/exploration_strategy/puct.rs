@@ -77,7 +77,7 @@ where
             let score = if child_visits > 0 {
                 edge.q()
             } else {
-                0.5
+                WinChance::DRAW.as_scalar()
             };
 
             let expl_score = exploration_score(parent_visits, child_visits);

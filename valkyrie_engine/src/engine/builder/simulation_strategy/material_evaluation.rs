@@ -45,7 +45,6 @@ use crate::{
 };
 
 const PIECE_VALUES: [i32; 5] = [100, 300, 330, 500, 900];
-const EVAL_SCALE: f32 = 400.0;
 
 #[derive(Debug)]
 pub struct MaterialEvaluation;
@@ -55,7 +54,7 @@ impl Strategy for MaterialEvaluation {
 }
 
 impl<C: EngineConfig> SimulationStrategy<C> for MaterialEvaluation {
-    type Output = f32;
+    type Output = WinChance;
 
     fn execute(_raw_eval: &[f32], position: &ChessPosition, _params: &Self::Params, _engine: &Engine<C>) -> Self::Output {
         let board = position.board();
@@ -70,10 +69,6 @@ impl<C: EngineConfig> SimulationStrategy<C> for MaterialEvaluation {
             score += (own - opponent) * value;
         }
 
-        sigmoid(score as f32)
+        WinChance::from_cp(score as f32)
     }
-}
-
-fn sigmoid(score: f32) -> f32 {
-    1.0 / (1.0 + (-score / EVAL_SCALE).exp())
 }

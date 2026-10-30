@@ -36,18 +36,48 @@
 
 use crate::prelude::*;
 
-impl Payload for f32 {
-    const WIN: Self = 1.0;
-    const DRAW: Self = 0.5;
-    const LOSS: Self = 0.0;
+const EVAL_SCALE: f32 = 400.0;
+const SCORE_EPSILON: f32 = 0.0001;
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct WinChance(f32);
+
+impl WinChance {
+    #[inline]
+    pub fn new(probability: f32) -> Self {
+        debug_assert!(
+            (0.0..=1.0).contains(&probability),
+            "win chance {probability} is outside [0, 1]"
+        );
+        Self(probability)
+    }
+
+    #[inline]
+    pub fn from_cp(cp: f32) -> Self {
+        Self(1.0 / (1.0 + (-cp / EVAL_SCALE).exp()))
+    }
+}
+
+impl Payload for WinChance {
+    const WIN: Self = Self(1.0);
+    const DRAW: Self = Self(0.5);
+    const LOSS: Self = Self(0.0);
 
     #[inline]
     fn as_scalar(&self) -> f32 {
-        *self
+        self.0
     }
 
     #[inline]
     fn flip(&mut self) {
-        *self = 1.0 - *self;
+        self.0 = 1.0 - self.0;
+    }
+}
+
+impl Score for WinChance {
+    #[inline]
+    fn cp(&self) -> i32 {
+        let probability = self.0.clamp(SCORE_EPSILON, 1.0 - SCORE_EPSILON);
+        (-EVAL_SCALE * (1.0 / probability - 1.0).ln()) as i32
     }
 }

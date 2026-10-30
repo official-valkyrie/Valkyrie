@@ -59,8 +59,9 @@ where
         let mut ranking: Vec<usize> = (0..edges.len()).collect();
         ranking.sort_unstable_by(|&lhs, &rhs| {
             let (lhs, rhs) = (&edges[lhs], &edges[rhs]);
-            rhs.q()
-                .total_cmp(&lhs.q())
+            (rhs.visits() > 0)
+                .cmp(&(lhs.visits() > 0))
+                .then(rhs.q().total_cmp(&lhs.q()))
                 .then(rhs.visits().cmp(&lhs.visits()))
         });
 

@@ -336,7 +336,10 @@ impl ChessBoard {
         let side_flip = usize::from(COLOR) * 56;
         match MOVE_FLAG {
             MoveFlag::DOUBLE_PUSH => {
-                self.en_passant_square = to_square ^ 8;
+                let en_passant_square = to_square ^ 8;
+                if self.is_en_passant_capturable(en_passant_square, Side::from(COLOR)) {
+                    self.en_passant_square = en_passant_square;
+                }
             }
             MoveFlag::QUEEN_SIDE_CASTLE => {
                 self.remove_piece_on_square(

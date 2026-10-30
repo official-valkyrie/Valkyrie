@@ -39,7 +39,7 @@ use crate::{
     board::{chess_board::ChessBoard, move_history::MoveHistory},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub struct ChessPosition {
     board: ChessBoard,
     history: MoveHistory,

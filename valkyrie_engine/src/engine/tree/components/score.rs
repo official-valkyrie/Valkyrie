@@ -34,9 +34,6 @@
     documentation.
 */
 
-const EVAL_SCALE: f32 = 400.0;
-const SCORE_EPSILON: f32 = 0.0001;
-
 pub trait Score: Copy + std::fmt::Debug + Send + Sync + 'static {
     fn cp(&self) -> i32;
 }
@@ -45,12 +42,4 @@ pub trait HasScore {
     type Score: Score;
 
     fn score(&self) -> Self::Score;
-}
-
-impl Score for f32 {
-    #[inline]
-    fn cp(&self) -> i32 {
-        let score = self.clamp(SCORE_EPSILON, 1.0 - SCORE_EPSILON);
-        (-EVAL_SCALE * (1.0 / score - 1.0).ln()) as i32
-    }
 }

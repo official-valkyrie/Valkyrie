@@ -43,6 +43,7 @@ pub enum PositionViolation {
     UnexpectedArgument(String),
     Fen(FenViolation),
     IllegalMove(String),
+    AmbiguousMove(String),
     HalfMoveLimit(String),
 }
 
@@ -64,6 +65,10 @@ impl std::fmt::Display for PositionViolation {
             }
             Self::Fen(violation) => write!(f, "Invalid FEN: {violation}"),
             Self::IllegalMove(mv) => write!(f, "Illegal move: {mv}"),
+            Self::AmbiguousMove(mv) => write!(
+                f,
+                "Ambiguous move: {mv} could be castling or a king step, enable UCI_Chess960"
+            ),
             Self::HalfMoveLimit(mv) => write!(
                 f,
                 "Move {mv} takes the half-move clock above {HALF_MOVE_LIMIT}"
@@ -106,9 +111,16 @@ pub fn parse_position(
     let mut position = ChessPosition::from(ChessBoard::from(&FEN::from(fen)));
 
     for &mv_str in moves {
-        let Some(mv) = find_legal_move(position.board(), mv_str, chess960) else {
-            violations.push(PositionViolation::IllegalMove(mv_str.to_string()));
-            break;
+        let mv = match find_legal_moves(position.board(), mv_str, chess960).as_slice() {
+            [mv] => *mv,
+            [] => {
+                violations.push(PositionViolation::IllegalMove(mv_str.to_string()));
+                break;
+            }
+            _ => {
+                violations.push(PositionViolation::AmbiguousMove(mv_str.to_string()));
+                break;
+            }
         };
 
         if half_moves_after(position.board(), mv) > HALF_MOVE_LIMIT {
@@ -132,12 +144,12 @@ fn half_moves_after(board: &ChessBoard, mv: Move) -> u8 {
     board.half_moves()
 }
 
-fn find_legal_move(board: &ChessBoard, mv_str: &str, chess960: bool) -> Option<Move> {
-    let mut found = None;
+fn find_legal_moves(board: &ChessBoard, mv_str: &str, chess960: bool) -> Vec<Move> {
+    let mut found = Vec::new();
 
     board.map_legal_moves(|mv| {
         if mv.to_string(chess960) == mv_str {
-            found = Some(mv);
+            found.push(mv);
         }
     });
 

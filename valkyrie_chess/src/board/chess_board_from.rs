@@ -107,7 +107,10 @@ impl From<&FEN> for ChessBoard {
         board.castle_rights.set_rights(rights);
 
         if value.en_passant_square != "-" {
-            board.en_passant_square = Square::from(value.en_passant_square.clone())
+            let square = Square::from(value.en_passant_square.clone());
+            if board.is_en_passant_capturable(square, board.side().flipped()) {
+                board.en_passant_square = square;
+            }
         }
 
         board.half_moves = value.half_move_counter.parse::<u8>().unwrap_or(0);
