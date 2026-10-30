@@ -123,3 +123,89 @@ fn apply_limit(limits: &mut SearchLimits, argument: &str, value: u64, side: Side
         _ => {}
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tokens(command: &str) -> Vec<&str> {
+        command.split_whitespace().collect()
+    }
+
+    #[test]
+    fn reads_the_limits_for_the_side_to_move() {
+        let command =
+            "wtime 1000 btime 2000 winc 10 binc 20 movestogo 5 movetime 300 depth 7 nodes 99";
+
+        let white = parse_go(&tokens(command), Side::WHITE).unwrap();
+        assert_eq!(white.time(), Some(1000));
+        assert_eq!(white.increment(), Some(10));
+
+        let black = parse_go(&tokens(command), Side::BLACK).unwrap();
+        assert_eq!(black.time(), Some(2000));
+        assert_eq!(black.increment(), Some(20));
+
+        assert_eq!(white.moves_to_go(), Some(5));
+        assert_eq!(white.move_time(), Some(300));
+        assert_eq!(white.depth(), Some(7));
+        assert_eq!(white.nodes(), Some(99));
+    }
+
+    #[test]
+    fn infinite_and_empty_commands_parse() {
+        assert!(
+            parse_go(&tokens("infinite"), Side::WHITE)
+                .unwrap()
+                .is_infinite()
+        );
+
+        let empty = parse_go(&[], Side::WHITE).unwrap();
+        assert!(!empty.is_infinite());
+        assert_eq!(empty.time(), None);
+        assert_eq!(empty.nodes(), None);
+    }
+
+    #[test]
+    fn negative_values_clamp_to_zero() {
+        let limits = parse_go(&tokens("wtime -500 nodes -1"), Side::WHITE).unwrap();
+
+        assert_eq!(limits.time(), Some(0));
+        assert_eq!(limits.nodes(), Some(0));
+    }
+
+    #[test]
+    fn unknown_tokens_are_ignored() {
+        let limits = parse_go(&tokens("ponder searchmoves e2e4 nodes 10"), Side::WHITE).unwrap();
+
+        assert_eq!(limits.nodes(), Some(10));
+    }
+
+    #[test]
+    fn missing_values_are_reported() {
+        let violations = parse_go(&tokens("nodes"), Side::WHITE).unwrap_err();
+        assert_eq!(violations, vec![GoViolation::MissingValue("nodes".into())]);
+
+        let violations = parse_go(&tokens("depth nodes 5"), Side::WHITE).unwrap_err();
+        assert_eq!(violations, vec![GoViolation::MissingValue("depth".into())]);
+    }
+
+    #[test]
+    fn invalid_values_are_reported_together() {
+        let violations = parse_go(&tokens("depth x nodes 1.5 movetime"), Side::WHITE).unwrap_err();
+
+        assert_eq!(
+            violations,
+            vec![
+                GoViolation::InvalidValue {
+                    argument: "depth".into(),
+                    value: "x".into()
+                },
+                GoViolation::InvalidValue {
+                    argument: "nodes".into(),
+                    value: "1.5".into()
+                },
+                GoViolation::MissingValue("movetime".into()),
+            ]
+        );
+    }
+}

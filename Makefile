@@ -1,31 +1,78 @@
-EXE = valkyrie
+BIN = valkyrie
 EXT = $(if $(filter Windows_NT,$(OS)),.exe,)
 
+HASH         = \#
+VERSION      = $(lastword $(subst @, ,$(lastword $(subst $(HASH), ,$(shell cargo pkgid -p valkyrie)))))
+DEV_NAME     = Valkyrie-dev-$(shell git log -1 --format=%cd-%h --date=format:%Y%m%d --abbrev=8)
+RELEASE_NAME = Valkyrie-v$(VERSION)
+RELEASE_DIR  = releases/$(RELEASE_NAME)
+
+comma := ,
+space := $(subst x,,x x)
+
+CARGO_FLAGS =
+TARGET_FEATURES_BASE =
+TARGET_FEATURES =
+CPU_FLAGS   = -C target-cpu=$(TARGET_CPU)$(if $(strip $(TARGET_FEATURES_BASE) $(TARGET_FEATURES)), -C target-feature=$(subst $(space),$(comma),$(strip $(TARGET_FEATURES_BASE) $(TARGET_FEATURES))))
+FEATURES    =
+SUFFIX      =
+DEBUG       = $(filter debug,$(MAKECMDGOALS))
+DEBUG_FLAGS = $(if $(DEBUG),--features debug --config profile.release.debug=true --config profile.release.strip=false)
+OUT         = $(if $(filter command line,$(origin EXE)),$(EXE),$(DEV_NAME)$(SUFFIX)$(if $(DEBUG),-debug))
+SRC         = target/release/$(BIN)$(EXT)
+DEST        = $(OUT)$(EXT)
+DEST_DIR    = .
+
 ifeq ($(OS),Windows_NT)
-    SET_RUSTFLAGS = set RUSTFLAGS=-C target-cpu=$(TARGET_CPU) $(EXTRA_FLAGS) &&
-    COPY_CMD      = copy /Y "target\release\$(EXE)$(EXT)" "$(EXE)$(EXT)" >nul 2>&1
+    SET_RUSTFLAGS = set RUSTFLAGS=$(CPU_FLAGS) &&
+    MKDIR_CMD     = if not exist "$(subst /,\,$(DEST_DIR))" mkdir "$(subst /,\,$(DEST_DIR))"
+    COPY_CMD      = copy /Y "$(subst /,\,$(SRC))" "$(subst /,\,$(DEST))" >nul
 else
-    SET_RUSTFLAGS = RUSTFLAGS="-C target-cpu=$(TARGET_CPU) $(EXTRA_FLAGS)"
-    COPY_CMD      = cp "target/release/$(EXE)$(EXT)" "./$(EXE)$(EXT)" 2>/dev/null
+    SET_RUSTFLAGS = RUSTFLAGS="$(CPU_FLAGS)"
+    MKDIR_CMD     = mkdir -p "$(DEST_DIR)"
+    COPY_CMD      = cp "$(SRC)" "$(DEST)"
 endif
 
-.PHONY: default debug v2 v3 v4 native-nopext v3-nopext
+RELEASE_TARGETS = v2 v3-nopext v3 v4
+
+.PHONY: default debug v2 v3 v4 native-nopext v3-nopext release $(addprefix release-,$(RELEASE_TARGETS))
+.NOTPARALLEL:
+
+debug: $(if $(filter-out debug,$(MAKECMDGOALS)),,default) ;
 
 default: TARGET_CPU = native
-debug:   TARGET_CPU = native
 v2:      TARGET_CPU = x86-64-v2
+v2:      SUFFIX = -v2
 v3:      TARGET_CPU = x86-64-v3
+v3:      SUFFIX = -v3
 v4:      TARGET_CPU = x86-64-v4
+v4:      SUFFIX = -v4
 
 native-nopext: TARGET_CPU = native
-native-nopext: EXTRA_FLAGS = -C target-feature=-bmi2
+native-nopext: TARGET_FEATURES_BASE = -bmi2
+native-nopext: SUFFIX = -nopext
 v3-nopext:     TARGET_CPU = x86-64-v3
-v3-nopext:     EXTRA_FLAGS = -C target-feature=-bmi2
+v3-nopext:     TARGET_FEATURES_BASE = -bmi2
+v3-nopext:     SUFFIX = -v3-nopext
 
 default v2 v3 v4 native-nopext v3-nopext:
-	$(SET_RUSTFLAGS) cargo build --release -p valkyrie --bin valkyrie
+	$(SET_RUSTFLAGS) cargo build --release $(CARGO_FLAGS) $(DEBUG_FLAGS) $(if $(FEATURES),--features $(FEATURES)) -p valkyrie --bin $(BIN)
 	$(COPY_CMD)
 
-debug:
-	$(SET_RUSTFLAGS) cargo build -p valkyrie --bin valkyrie --features=debug
+release-v2:        TARGET_CPU = x86-64-v2
+release-v3-nopext: TARGET_CPU = x86-64-v3
+release-v3-nopext: TARGET_FEATURES_BASE = -bmi2
+release-v3:        TARGET_CPU = x86-64-v3
+release-v4:        TARGET_CPU = x86-64-v4
+release-%:         CARGO_FLAGS = --features release
+release-%:         override TARGET_FEATURES =
+release-%:         override FEATURES =
+release-%:         DEST_DIR = $(RELEASE_DIR)
+release-%:         DEST = $(RELEASE_DIR)/$(RELEASE_NAME)-$(patsubst release-%,%,$@)$(EXT)
+
+release: $(addprefix release-,$(RELEASE_TARGETS))
+
+$(addprefix release-,$(RELEASE_TARGETS)):
+	$(MKDIR_CMD)
+	$(SET_RUSTFLAGS) cargo build --release $(CARGO_FLAGS) -p valkyrie --bin $(BIN)
 	$(COPY_CMD)

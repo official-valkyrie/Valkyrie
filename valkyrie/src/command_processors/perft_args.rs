@@ -74,3 +74,36 @@ pub fn parse_perft(args: &[&str]) -> Result<Option<u8>, Vec<PerftViolation>> {
         Err(violations)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn depth_is_optional() {
+        assert_eq!(parse_perft(&[]), Ok(None));
+        assert_eq!(parse_perft(&["5"]), Ok(Some(5)));
+        assert_eq!(parse_perft(&["0"]), Ok(Some(0)));
+    }
+
+    #[test]
+    fn bad_depths_are_reported() {
+        for depth in ["x", "-1", "256", "1.5"] {
+            assert_eq!(
+                parse_perft(&[depth]),
+                Err(vec![PerftViolation::InvalidDepth(depth.into())])
+            );
+        }
+    }
+
+    #[test]
+    fn extra_arguments_are_reported() {
+        assert_eq!(
+            parse_perft(&["5", "6", "7"]),
+            Err(vec![
+                PerftViolation::UnexpectedArgument("6".into()),
+                PerftViolation::UnexpectedArgument("7".into()),
+            ])
+        );
+    }
+}

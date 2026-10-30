@@ -155,3 +155,91 @@ fn find_legal_moves(board: &ChessBoard, mv_str: &str, chess960: bool) -> Vec<Mov
 
     found
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use valkyrie_chess::Side;
+
+    fn tokens(command: &str) -> Vec<&str> {
+        command.split_whitespace().collect()
+    }
+
+    #[test]
+    fn startpos_with_moves() {
+        let position = parse_position(&tokens("startpos moves e2e4 e7e5 g1f3"), false).unwrap();
+
+        assert_eq!(position.board().side(), Side::BLACK);
+        assert_eq!(position.history().len(), 2);
+    }
+
+    #[test]
+    fn fen_positions_load() {
+        let position =
+            parse_position(&tokens("fen 4k3/8/8/8/8/8/8/4K2R w K - 0 1"), false).unwrap();
+
+        assert_eq!(position.board().side(), Side::WHITE);
+    }
+
+    #[test]
+    fn setup_errors() {
+        assert_eq!(
+            parse_position(&[], false).unwrap_err(),
+            vec![PositionViolation::MissingSetup]
+        );
+        assert_eq!(
+            parse_position(&tokens("board"), false).unwrap_err(),
+            vec![PositionViolation::UnknownSetup("board".into())]
+        );
+        assert_eq!(
+            parse_position(&tokens("startpos e2e4"), false).unwrap_err(),
+            vec![PositionViolation::UnexpectedArgument("e2e4".into())]
+        );
+    }
+
+    #[test]
+    fn invalid_fens_are_reported() {
+        let violations =
+            parse_position(&tokens("fen 8/8/8/8/8/8/8/8 w - - 0 1"), false).unwrap_err();
+
+        assert!(!violations.is_empty());
+        assert!(
+            violations
+                .iter()
+                .all(|violation| matches!(violation, PositionViolation::Fen(_)))
+        );
+    }
+
+    #[test]
+    fn illegal_moves_stop_at_the_first_one() {
+        let violations = parse_position(&tokens("startpos moves e2e5 e7e5"), false).unwrap_err();
+
+        assert_eq!(
+            violations,
+            vec![PositionViolation::IllegalMove("e2e5".into())]
+        );
+    }
+
+    #[test]
+    fn castling_and_king_step_are_ambiguous_in_standard_notation() {
+        let setup = "fen 4k3/8/8/8/8/8/8/5K1R w H - 0 1 moves f1g1";
+
+        assert_eq!(
+            parse_position(&tokens(setup), false).unwrap_err(),
+            vec![PositionViolation::AmbiguousMove("f1g1".into())]
+        );
+        assert!(parse_position(&tokens(setup), true).is_ok());
+    }
+
+    #[test]
+    fn half_move_clock_cannot_pass_the_limit() {
+        let quiet = "fen 4k3/8/8/8/8/8/8/4K2R w - - 100 1 moves e1d1";
+        assert_eq!(
+            parse_position(&tokens(quiet), false).unwrap_err(),
+            vec![PositionViolation::HalfMoveLimit("e1d1".into())]
+        );
+
+        let capture_free_reset = "fen 4k3/8/8/8/8/8/P7/4K3 w - - 100 1 moves a2a3";
+        assert!(parse_position(&tokens(capture_free_reset), false).is_ok());
+    }
+}
