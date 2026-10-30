@@ -54,5 +54,5 @@ pub use r#move::Move;
 pub use r#move::MoveFlag;
 pub use piece::Piece;
 pub use side::Side;
-pub use square::Square;
+pub use square::{InvalidSquare, Square};
 pub use zobrist_key::ZobristKey;

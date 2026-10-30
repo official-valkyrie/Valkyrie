@@ -39,6 +39,8 @@ use std::{
     fmt::{Display, Formatter, Result},
 };
 
+use crate::{Side, base_structures::CastleRights};
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FEN {
     pub(crate) board: [String; 8],
@@ -50,6 +52,25 @@ pub struct FEN {
 }
 
 impl FEN {
+    pub(crate) fn home_rank(&self, side: Side) -> [char; 8] {
+        let rank = &self.board[if side == Side::WHITE { 7 } else { 0 }];
+        let mut result = ['.'; 8];
+        let mut file = 0;
+
+        for symbol in rank.chars() {
+            if let Some(empty) = symbol.to_digit(10) {
+                file += empty as usize;
+            } else {
+                if file < 8 {
+                    result[file] = symbol;
+                }
+                file += 1;
+            }
+        }
+
+        result
+    }
+
     pub fn start_position() -> Self {
         Self::from("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w HAha - 0 1")
     }
@@ -126,106 +147,18 @@ impl Display for FEN {
 }
 
 fn normalize_castle_rights(fen: &FEN, rights: &str) -> String {
-    //Helper method to find occurance of the character in the fen string
-    let find_files = |rank_str: &String, target: char| -> Vec<u8> {
-        let mut result = Vec::new();
-        let mut file_idx = 0;
-        for char in rank_str.chars() {
-            if char.is_ascii_digit() {
-                file_idx += char as u8 - b'0'
-            } else {
-                if char == target {
-                    result.push(file_idx);
-                }
-                file_idx += 1;
-            }
-        }
+    let white_rank = fen.home_rank(Side::WHITE);
+    let black_rank = fen.home_rank(Side::BLACK);
 
-        result
-    };
-
-    if rights == "-" {
-        return String::from("-");
-    }
-
-    let white_king = find_files(&fen.board[7], 'K');
-    let black_king = find_files(&fen.board[0], 'k');
-
-    let white_king_file = if white_king.is_empty() {
-        255
-    } else {
-        white_king[0]
-    };
-    let black_king_file = if black_king.is_empty() {
-        255
-    } else {
-        black_king[0]
-    };
-
-    let white_rooks = find_files(&fen.board[7], 'R');
-    let black_rooks = find_files(&fen.board[0], 'r');
-
-    let mut result = String::new();
-
-    //Convert different castle rights format into unified 'HAha'
-    for char in rights.chars() {
-        match char {
-            'K' => {
-                if white_king_file >= 8 {
-                    continue;
-                }
-
-                let file = white_rooks
-                    .iter()
-                    .rev()
-                    .find(|&element| *element > white_king_file);
-                if let Some(file) = file {
-                    result.push(char::from(b'A' + file));
-                }
-            }
-            'Q' => {
-                if white_king_file >= 8 {
-                    continue;
-                }
-
-                let file = white_rooks
-                    .iter()
-                    .find(|&element| *element < white_king_file);
-                if let Some(file) = file {
-                    result.push(char::from(b'A' + file));
-                }
-            }
-            'k' => {
-                if black_king_file >= 8 {
-                    continue;
-                }
-
-                let file = black_rooks
-                    .iter()
-                    .rev()
-                    .find(|&element| *element > black_king_file);
-                if let Some(file) = file {
-                    result.push(char::from(b'a' + file));
-                }
-            }
-            'q' => {
-                if black_king_file >= 8 {
-                    continue;
-                }
-
-                let file = black_rooks
-                    .iter()
-                    .find(|&element| *element < black_king_file);
-                if let Some(file) = file {
-                    result.push(char::from(b'a' + file));
-                }
-            }
-            'A'..='H' | 'a'..='h' => {
-                result.push(char);
-            }
-            _ => continue,
-        }
-    }
+    let result: String = rights
+        .chars()
+        .filter_map(|right| {
+            let is_white = right.is_ascii_uppercase();
+            let home_rank = if is_white { &white_rank } else { &black_rank };
+            let (file, _) = CastleRights::resolve(home_rank, right)?;
+            Some(char::from(if is_white { b'A' } else { b'a' } + file))
+        })
+        .collect();
 
     if result.is_empty() {
         String::from("-")

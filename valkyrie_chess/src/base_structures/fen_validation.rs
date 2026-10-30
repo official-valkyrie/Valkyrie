@@ -36,7 +36,7 @@
 
 use std::fmt::{Display, Formatter, Result};
 
-use crate::{ChessBoard, FEN, Piece, Side, Square};
+use crate::{ChessBoard, FEN, Piece, Side, Square, base_structures::CastleRights};
 
 const EMPTY: char = '.';
 
@@ -299,24 +299,15 @@ fn validate_castling_rights(
 }
 
 fn castling_wing(squares: &[char; 64], right: char) -> Option<usize> {
-    let (king, rook, home_rank) = if right.is_ascii_uppercase() {
-        ('K', 'R', &squares[..8])
+    let home_rank: &[char; 8] = if right.is_ascii_uppercase() {
+        squares[..8].try_into().ok()?
     } else {
-        ('k', 'r', &squares[56..])
+        squares[56..].try_into().ok()?
     };
 
-    let king_file = home_rank.iter().position(|&symbol| symbol == king)?;
+    let (_, king_side) = CastleRights::resolve(home_rank, right)?;
 
-    let (available, king_side) = match right.to_ascii_lowercase() {
-        'k' => (home_rank[king_file + 1..].contains(&rook), true),
-        'q' => (home_rank[..king_file].contains(&rook), false),
-        file => {
-            let rook_file = usize::from(file as u8 - b'a');
-            (home_rank[rook_file] == rook, rook_file > king_file)
-        }
-    };
-
-    available.then_some(2 * usize::from(right.is_ascii_lowercase()) + usize::from(king_side))
+    Some(2 * usize::from(right.is_ascii_lowercase()) + usize::from(king_side))
 }
 
 fn validate_en_passant(

@@ -385,10 +385,10 @@ impl ChessBoard {
     }
 }
 
-const PAWN: u8 = 0;
-const KNIGHT: u8 = 1;
-const BISHOP: u8 = 2;
-const ROOK: u8 = 3;
-const QUEEN: u8 = 4;
-const KING: u8 = 5;
-const NONE: u8 = 6;
+const PAWN: u8 = Piece::PAWN.value() as u8;
+const KNIGHT: u8 = Piece::KNIGHT.value() as u8;
+const BISHOP: u8 = Piece::BISHOP.value() as u8;
+const ROOK: u8 = Piece::ROOK.value() as u8;
+const QUEEN: u8 = Piece::QUEEN.value() as u8;
+const KING: u8 = Piece::KING.value() as u8;
+const NONE: u8 = Piece::NONE.value() as u8;

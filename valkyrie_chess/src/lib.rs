@@ -48,6 +48,7 @@ pub use base_structures::Bitboard;
 pub use base_structures::FEN;
 pub use base_structures::FenViolation;
 pub use base_structures::GameState;
+pub use base_structures::InvalidSquare;
 pub use base_structures::Move;
 pub use base_structures::MoveFlag;
 pub use base_structures::Piece;
@@ -74,9 +75,9 @@ pub fn perft<const BULK: bool>(
 
     let mask = board.castle_rights().get_castle_mask();
     let count_child = if board.side() == Side::WHITE {
-        perft_internal_black::<BULK>
+        perft_internal::<BULK, 1>
     } else {
-        perft_internal_white::<BULK>
+        perft_internal::<BULK, 0>
     };
     let mut node_count = 0u64;
 
@@ -91,41 +92,29 @@ pub fn perft<const BULK: bool>(
     (node_count, timer.elapsed())
 }
 
-fn perft_internal_white<const BULK: bool>(board: &ChessBoard, depth: u8, mask: &[u8; 64]) -> u64 {
-    let mut node_count = 0u64;
-
+fn perft_internal<const BULK: bool, const COLOR: u8>(
+    board: &ChessBoard,
+    depth: u8,
+    mask: &[u8; 64],
+) -> u64 {
     if depth == 0 {
         return 1;
     }
 
     if BULK && depth == 1 {
-        return board.count_legal_moves_templated::<0>() as u64;
+        return board.count_legal_moves_templated::<COLOR>() as u64;
     }
 
-    board.map_legal_moves_templated::<_, 0>(|mv| {
-        let mut board_copy = *board;
-        board_copy.make_move_templated::<0>(mv, mask);
-        node_count += perft_internal_black::<BULK>(&board_copy, depth - 1, mask);
-    });
-
-    node_count
-}
-
-fn perft_internal_black<const BULK: bool>(board: &ChessBoard, depth: u8, mask: &[u8; 64]) -> u64 {
     let mut node_count = 0u64;
 
-    if depth == 0 {
-        return 1;
-    }
-
-    if BULK && depth == 1 {
-        return board.count_legal_moves_templated::<1>() as u64;
-    }
-
-    board.map_legal_moves_templated::<_, 1>(|mv| {
+    board.map_legal_moves_templated::<_, COLOR>(|mv| {
         let mut board_copy = *board;
-        board_copy.make_move_templated::<1>(mv, mask);
-        node_count += perft_internal_white::<BULK>(&board_copy, depth - 1, mask);
+        board_copy.make_move_templated::<COLOR>(mv, mask);
+        node_count += if COLOR == 0 {
+            perft_internal::<BULK, 1>(&board_copy, depth - 1, mask)
+        } else {
+            perft_internal::<BULK, 0>(&board_copy, depth - 1, mask)
+        };
     });
 
     node_count

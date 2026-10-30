@@ -52,6 +52,29 @@ impl CastleRights {
     pub const WHITE_QUEEN: u8 = 0b1000;
     pub const NULL: u8 = 0;
 
+    pub(crate) fn resolve(home_rank: &[char; 8], right: char) -> Option<(u8, bool)> {
+        let (king, rook) = if right.is_ascii_uppercase() {
+            ('K', 'R')
+        } else {
+            ('k', 'r')
+        };
+        let king_file = home_rank.iter().position(|&symbol| symbol == king)?;
+
+        let rook_file = match right.to_ascii_lowercase() {
+            'k' => (king_file + 1..8)
+                .rev()
+                .find(|&file| home_rank[file] == rook)?,
+            'q' => (0..king_file).find(|&file| home_rank[file] == rook)?,
+            file @ 'a'..='h' => {
+                let file = usize::from(file as u8 - b'a');
+                (home_rank[file] == rook).then_some(file)?
+            }
+            _ => return None,
+        };
+
+        Some((rook_file as u8, rook_file > king_file))
+    }
+
     pub fn create_base(rooks: [Square; 4], kings: [Square; 2]) -> Self {
         Self {
             value: 0,

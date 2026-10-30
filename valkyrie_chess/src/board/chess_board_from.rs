@@ -78,31 +78,25 @@ impl From<&FEN> for ChessBoard {
         let mut rooks = [Square::NULL; 4];
         let mut rights = 0u8;
 
-        for char in value.castle_rights.chars() {
-            if char == '-' {
-                break;
-            }
-
-            let side = if char.is_ascii_uppercase() {
-                Side::WHITE
-            } else {
-                Side::BLACK
+        for right in value.castle_rights.chars() {
+            let side = Side::from(right.is_ascii_lowercase());
+            let Some((file, king_side)) = CastleRights::resolve(&value.home_rank(side), right)
+            else {
+                continue;
             };
-            let king_square = board.king_square(side);
-            let file = char.to_ascii_uppercase() as u8 - b'A';
-            let index = 2 * u8::from(side) + if file < king_square.file() { 0 } else { 1 };
+
+            let index = 2 * usize::from(side) + usize::from(king_side);
             rights |= 0b1000 >> index;
-            rooks[usize::from(index)] = Square::from_coords(king_square.get_rank(), file);
+            rooks[index] = Square::from_coords(board.king_square(side).get_rank(), file);
         }
 
         board.castle_rights = CastleRights::create_base(rooks, kings);
         board.castle_rights.set_rights(rights);
 
-        if value.en_passant_square != "-" {
-            let square = Square::from(value.en_passant_square.clone());
-            if board.is_en_passant_capturable(square, board.side().flipped()) {
-                board.en_passant_square = square;
-            }
+        if let Ok(square) = value.en_passant_square.parse::<Square>()
+            && board.is_en_passant_capturable(square, board.side().flipped())
+        {
+            board.en_passant_square = square;
         }
 
         board.half_moves = value.half_move_counter.parse::<u8>().unwrap_or(0);
@@ -115,7 +109,6 @@ impl From<&ChessBoard> for FEN {
     fn from(value: &ChessBoard) -> Self {
         let mut fen = String::new();
 
-        // Piece placement
         for rank in (0..8).rev() {
             let mut empty_count = 0;
             for file in 0..8 {
@@ -145,7 +138,6 @@ impl From<&ChessBoard> for FEN {
             }
         }
 
-        // Side to move
         fen.push(' ');
         fen.push(if value.side() == Side::WHITE {
             'w'
@@ -153,11 +145,9 @@ impl From<&ChessBoard> for FEN {
             'b'
         });
 
-        // Castling rights
         fen.push(' ');
         fen.push_str(String::from(*value.castle_rights()).as_str());
 
-        // En passant target square
         fen.push(' ');
         if value.en_passant_square() == Square::NULL {
             fen.push('-');
@@ -165,7 +155,6 @@ impl From<&ChessBoard> for FEN {
             fen.push_str(String::from(value.en_passant_square()).as_str());
         }
 
-        // Halfmove clock and fullmove number
         fen.push(' ');
         fen.push_str(&value.half_moves().to_string());
         fen.push(' ');

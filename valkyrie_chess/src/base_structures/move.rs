@@ -39,28 +39,28 @@ use crate::{
     base_structures::{Piece, Side},
 };
 
+const SQUARE_MASK: u16 = 0b11_1111;
+const FLAG_SHIFT: u16 = 6;
+const FLAG_MASK: u16 = 0b1111 << FLAG_SHIFT;
+const TO_SQUARE_SHIFT: u16 = 10;
+
 pub struct MoveFlag;
 impl MoveFlag {
-    pub const QUIET_MOVE: u16 = 0b0000 << 6;
-    pub const DOUBLE_PUSH: u16 = 0b0001 << 6;
-    pub const KING_SIDE_CASTLE: u16 = 0b0010 << 6;
-    pub const QUEEN_SIDE_CASTLE: u16 = 0b0011 << 6;
-    pub const CAPTURE: u16 = 0b0100 << 6;
-    pub const EN_PASSANT: u16 = 0b0101 << 6;
-    pub const KNIGHT_PROMOTION: u16 = 0b1000 << 6;
-    pub const BISHOP_PROMOTION: u16 = 0b1001 << 6;
-    pub const ROOK_PROMOTION: u16 = 0b1010 << 6;
-    pub const QUEEN_PROMOTION: u16 = 0b1011 << 6;
-    pub const KNIGHT_PROMOTION_CAPTURE: u16 = 0b1100 << 6;
-    pub const BISHOP_PROMOTION_CAPTURE: u16 = 0b1101 << 6;
-    pub const ROOK_PROMOTION_CAPTURE: u16 = 0b1110 << 6;
-    pub const QUEEN_PROMOTION_CAPTURE: u16 = 0b1111 << 6;
+    pub const QUIET_MOVE: u16 = 0b0000 << FLAG_SHIFT;
+    pub const DOUBLE_PUSH: u16 = 0b0001 << FLAG_SHIFT;
+    pub const KING_SIDE_CASTLE: u16 = 0b0010 << FLAG_SHIFT;
+    pub const QUEEN_SIDE_CASTLE: u16 = 0b0011 << FLAG_SHIFT;
+    pub const CAPTURE: u16 = 0b0100 << FLAG_SHIFT;
+    pub const EN_PASSANT: u16 = 0b0101 << FLAG_SHIFT;
+    pub const KNIGHT_PROMOTION: u16 = 0b1000 << FLAG_SHIFT;
+    pub const BISHOP_PROMOTION: u16 = 0b1001 << FLAG_SHIFT;
+    pub const ROOK_PROMOTION: u16 = 0b1010 << FLAG_SHIFT;
+    pub const QUEEN_PROMOTION: u16 = 0b1011 << FLAG_SHIFT;
+    pub const KNIGHT_PROMOTION_CAPTURE: u16 = 0b1100 << FLAG_SHIFT;
+    pub const BISHOP_PROMOTION_CAPTURE: u16 = 0b1101 << FLAG_SHIFT;
+    pub const ROOK_PROMOTION_CAPTURE: u16 = 0b1110 << FLAG_SHIFT;
+    pub const QUEEN_PROMOTION_CAPTURE: u16 = 0b1111 << FLAG_SHIFT;
 }
-
-//16 bit move
-//0..5 -> from square
-//6..9 -> flag
-//10..15 -> to square
 
 #[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub struct Move(u16);
@@ -69,22 +69,22 @@ impl Move {
 
     #[inline]
     pub fn from_squares(from_square: Square, to_square: Square, flag: u16) -> Self {
-        Self(u16::from(to_square) << 10 | flag | u16::from(from_square))
+        Self(u16::from(to_square) << TO_SQUARE_SHIFT | flag | u16::from(from_square))
     }
 
     #[inline]
     pub fn from_square(&self) -> Square {
-        Square::from((self.0 & 63) as u8)
+        Square::from((self.0 & SQUARE_MASK) as u8)
     }
 
     #[inline]
     pub fn to_square(&self) -> Square {
-        Square::from((self.0 >> 10) as u8)
+        Square::from((self.0 >> TO_SQUARE_SHIFT) as u8)
     }
 
     #[inline]
     pub fn flag(&self) -> u16 {
-        self.0 & (15 << 6)
+        self.0 & FLAG_MASK
     }
 
     #[inline]
@@ -110,7 +110,7 @@ impl Move {
 
     #[inline]
     pub fn promotion_piece(&self) -> Piece {
-        Piece::from((((self.flag() >> 6) & 3) + 1) as u8)
+        Piece::from((((self.flag() >> FLAG_SHIFT) & 3) + 1) as u8)
     }
 
     pub fn to_string(&self, chess960: bool) -> String {

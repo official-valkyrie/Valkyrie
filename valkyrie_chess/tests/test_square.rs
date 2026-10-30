@@ -34,7 +34,7 @@
     documentation.
 */
 
-use valkyrie_chess::{Bitboard, Square};
+use valkyrie_chess::{Bitboard, InvalidSquare, Square};
 
 #[test]
 fn shift_left() {
@@ -58,8 +58,18 @@ fn shift_right() {
 
 #[test]
 fn from_string() {
-    assert_eq!(Square::from("h8"), Square::H8);
-    assert_eq!(Square::from("b2".to_string()), Square::B2);
+    assert_eq!(Square::try_from("h8"), Ok(Square::H8));
+    assert_eq!(Square::try_from("b2"), Ok(Square::B2));
+    assert_eq!(Square::try_from("a1"), Ok(Square::A1));
+}
+
+#[test]
+fn from_string_rejects_garbage() {
+    for text in [
+        "", "-", "e", "e9", "e0", "i1", "E4", "e44", "e4 ", "\u{e9}4", "NULL",
+    ] {
+        assert_eq!(text.parse::<Square>(), Err(InvalidSquare), "{text:?}");
+    }
 }
 
 #[test]

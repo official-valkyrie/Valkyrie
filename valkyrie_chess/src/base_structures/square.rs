@@ -37,6 +37,7 @@
 use std::{
     fmt::{Display, Formatter, Result},
     ops::{Add, BitXor, Shl, Shr},
+    str::FromStr,
 };
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -179,23 +180,38 @@ impl From<Square> for usize {
     }
 }
 
-impl From<String> for Square {
-    #[inline]
-    fn from(value: String) -> Self {
-        let signatures: Vec<char> = value.chars().collect();
-        let file = signatures[0] as u8 - b'a';
-        let rank = signatures[1].to_string().parse::<u8>().unwrap() - 1;
-        Square::from_coords(rank, file)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvalidSquare;
+
+impl Display for InvalidSquare {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
+        write!(
+            formatter,
+            "square must be a file a-h followed by a rank 1-8"
+        )
     }
 }
 
-impl From<&str> for Square {
-    #[inline]
-    fn from(value: &str) -> Self {
-        let signatures: Vec<char> = value.chars().collect();
-        let file = signatures[0] as u8 - b'a';
-        let rank = signatures[1].to_string().parse::<u8>().unwrap() - 1;
-        Square::from_coords(rank, file)
+impl std::error::Error for InvalidSquare {}
+
+impl FromStr for Square {
+    type Err = InvalidSquare;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        match value.as_bytes() {
+            &[file @ b'a'..=b'h', rank @ b'1'..=b'8'] => {
+                Ok(Square::from_coords(rank - b'1', file - b'a'))
+            }
+            _ => Err(InvalidSquare),
+        }
+    }
+}
+
+impl TryFrom<&str> for Square {
+    type Error = InvalidSquare;
+
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
+        value.parse()
     }
 }
 

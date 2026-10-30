@@ -23,3 +23,8 @@ jobs:
 
       - name: Run tests
         run: cargo test --all
+
+      - name: Run tests with PEXT slider tables
+        run: cargo test --all
+        env:
+          RUSTFLAGS: -C target-cpu=x86-64-v3
