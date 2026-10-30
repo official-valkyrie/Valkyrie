@@ -90,6 +90,10 @@ impl Input {
         }
     }
 
+    pub fn has_queued(&self) -> bool {
+        !self.queue.is_empty()
+    }
+
     pub fn push_back(&mut self, line: String) {
         self.queue.push_back(line);
     }

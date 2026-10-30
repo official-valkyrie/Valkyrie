@@ -40,17 +40,23 @@ pub struct SearchContext<'a, C: EngineConfig> {
     limits: &'a SearchLimits,
     stats: SearchStats,
     time_manager: C::TimeManager,
+    report: for<'b> fn(&Engine<C>, &SearchContext<'b, C>) -> SearchReport,
 }
 
 impl<'a, C: EngineConfig> SearchContext<'a, C>
 where
     C::TimeManager: TimeManagerStrategy<C>,
 {
-    pub(crate) fn new(limits: &'a SearchLimits, engine: &Engine<C>) -> Self {
+    pub(crate) fn new(
+        limits: &'a SearchLimits,
+        engine: &Engine<C>,
+        report: for<'b> fn(&Engine<C>, &SearchContext<'b, C>) -> SearchReport,
+    ) -> Self {
         Self {
             limits,
             stats: SearchStats::new(),
             time_manager: C::TimeManager::new(limits, engine.params().time_manager(), engine),
+            report,
         }
     }
 }
@@ -69,6 +75,10 @@ impl<C: EngineConfig> SearchContext<'_, C> {
     #[inline]
     pub fn time_manager(&self) -> &C::TimeManager {
         &self.time_manager
+    }
+
+    pub fn report(&self, engine: &Engine<C>) -> SearchReport {
+        (self.report)(engine, self)
     }
 
     pub(crate) fn into_stats(self) -> SearchStats {

@@ -43,6 +43,9 @@ use crate::{
     commands::{Category, Shell},
 };
 
+const LINE_WIDTH: usize = 80;
+const MIN_DESCRIPTION_WIDTH: usize = 24;
+
 pub fn render<C: EngineConfig>(shell: &Shell<C>) -> String {
     let mut sections: Vec<(&str, Vec<(String, String)>)> = Vec::new();
 
@@ -101,7 +104,7 @@ pub fn render<C: EngineConfig>(shell: &Shell<C>) -> String {
 
     let specs = RefCell::new(Vec::new());
     shell
-        .engine
+        .engine()
         .params()
         .visit_options(&|spec| specs.borrow_mut().push(spec.clone()));
     let specs = specs.into_inner();
@@ -121,6 +124,9 @@ pub fn render<C: EngineConfig>(shell: &Shell<C>) -> String {
         .map(|(left, _)| left.len())
         .max()
         .unwrap_or(0);
+    let description_width = LINE_WIDTH
+        .saturating_sub(width + 4)
+        .max(MIN_DESCRIPTION_WIDTH);
 
     let mut text = format!(
         "{}\n\nUsage: valkyrie [FLAGS] [--option.NAME VALUE]... [COMMAND [ARGS]]...\n       Leading dashes are optional on flags, commands and options.\n",
@@ -131,11 +137,33 @@ pub fn render<C: EngineConfig>(shell: &Shell<C>) -> String {
         text += &format!("\n{title}:\n");
 
         for (left, right) in rows {
-            text += &format!("  {left:<width$}  {right}\n");
+            for (idx, line) in wrap(right, description_width).iter().enumerate() {
+                let left = if idx == 0 { left.as_str() } else { "" };
+                text += &format!("  {left:<width$}  {line}\n");
+            }
         }
     }
 
     text.trim_end().to_string()
+}
+
+fn wrap(text: &str, width: usize) -> Vec<String> {
+    let mut lines = vec![String::new()];
+
+    for word in text.split_whitespace() {
+        let line = lines.last_mut().unwrap();
+
+        if !line.is_empty() && line.len() + 1 + word.len() > width {
+            lines.push(word.to_string());
+        } else {
+            if !line.is_empty() {
+                line.push(' ');
+            }
+            line.push_str(word);
+        }
+    }
+
+    lines
 }
 
 fn option_rows<'a>(specs: impl Iterator<Item = &'a OptionSpec>) -> Vec<(String, String)> {

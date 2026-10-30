@@ -89,4 +89,8 @@ impl<C: EngineConfig> TimeManagerStrategy<C> for SimpleTimeManager {
             None => false,
         }
     }
+
+    fn hard_limit_ms(&self) -> Option<u64> {
+        self.hard_limit
+    }
 }

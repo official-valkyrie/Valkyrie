@@ -34,5 +34,39 @@
     documentation.
 */
 
-pub mod minimal_display;
-pub mod simple_display;
+use valkyrie_engine::prelude::*;
+
+pub fn identify(name: &str, author: &str) {
+    println!("id name {name}");
+    println!("id author {author}");
+}
+
+pub fn option(spec: &OptionSpec) {
+    let mut line = format!("option name {} type {}", spec.name, spec.kind.uci_name());
+
+    if spec.kind != OptionKind::Button {
+        let default = if spec.default.is_empty() {
+            "<empty>"
+        } else {
+            &spec.default
+        };
+
+        line += &format!(" default {default}");
+    }
+
+    if let Some((min, max)) = &spec.range
+        && (spec.kind == OptionKind::Spin || spec.tunable)
+    {
+        line += &format!(" min {min} max {max}");
+    }
+
+    println!("{line}")
+}
+
+pub fn uci_ok() {
+    println!("uciok")
+}
+
+pub fn ready_ok() {
+    println!("readyok")
+}

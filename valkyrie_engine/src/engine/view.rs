@@ -38,7 +38,7 @@ use std::time::Duration;
 
 use valkyrie_chess::{ChessBoard, Move};
 
-use crate::engine::{Engine, OptionSpec, SearchContext, builder::EngineConfig};
+use crate::engine::{SearchLimits, SearchReport, SearchStats};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageLevel {
@@ -46,37 +46,43 @@ pub enum MessageLevel {
     Error,
 }
 
-pub trait Display<C: EngineConfig>: std::fmt::Debug + Send + Sync {
+pub trait View: std::fmt::Debug + Send + Sync {
+    fn start(&self) {}
+
+    fn finish(&self) {}
+
     fn message(&self, _level: MessageLevel, _text: &str) {}
-
-    fn identify(&self, _name: &str, _author: &str) {}
-
-    fn option(&self, _spec: &OptionSpec) {}
-
-    fn handshake_done(&self) {}
-
-    fn ready(&self) {}
 
     fn board(&self, _board: &ChessBoard) {}
 
+    fn position_changed(&self, _board: &ChessBoard) {}
+
+    fn option_changed(&self, _name: &str, _value: &str) {}
+
+    fn button_pressed(&self, _name: &str) {}
+
     fn perft_started(&self, _board: &ChessBoard, _depth: u8, _bulk: bool) {}
 
-    fn perft_move(&self, _mv: Move, _nodes: u64, _engine: &Engine<C>) {}
+    fn perft_move(&self, _mv: Move, _nodes: u64, _chess960: bool) {}
 
     fn perft_finished(&self, _nodes: u64, _elapsed: Duration) {}
 
     fn bench_finished(&self, _nodes: u64, _elapsed: Duration) {}
 
-    fn search_started(&self, _context: &SearchContext<C>, _engine: &Engine<C>) {}
+    fn search_started(&self, _limits: &SearchLimits) {}
 
-    fn search_update(&self, _context: &SearchContext<C>, _engine: &Engine<C>) {}
+    fn wants_report(&self, _stats: &SearchStats) -> bool {
+        false
+    }
 
-    fn search_ended(&self, _context: &SearchContext<C>, _engine: &Engine<C>) {}
+    fn report(&self, _report: &SearchReport) {}
 
-    fn best_move(&self, _mv: Move, _engine: &Engine<C>) {}
+    fn search_ended(&self, _report: &SearchReport) {}
+
+    fn best_move(&self, _mv: Move, _chess960: bool) {}
 }
 
 #[derive(Debug)]
-pub struct NoDisplay;
+pub struct NoView;
 
-impl<C: EngineConfig> Display<C> for NoDisplay {}
+impl View for NoView {}

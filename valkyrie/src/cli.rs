@@ -68,7 +68,7 @@ pub const FLAGS: &[FlagInfo] = &[
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum DisplayChoice {
+pub enum ViewChoice {
     #[default]
     Simple,
     Minimal,
@@ -82,7 +82,7 @@ pub enum Item {
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Cli {
-    pub display: DisplayChoice,
+    pub view: ViewChoice,
     pub interactive: bool,
     pub items: Vec<Item>,
 }
@@ -150,7 +150,7 @@ pub fn parse(
 ) -> std::result::Result<Cli, Vec<CliViolation>> {
     let mut cli = Cli::default();
     let mut violations = Vec::new();
-    let mut chosen_display = None;
+    let mut chosen_view = None;
     let mut idx = 0;
 
     while idx < args.len() {
@@ -199,8 +199,8 @@ pub fn parse(
             .filter(|_| dashes != 1)
         {
             let choice = match info.flag {
-                Flag::Simple => Some(DisplayChoice::Simple),
-                Flag::Minimal => Some(DisplayChoice::Minimal),
+                Flag::Simple => Some(ViewChoice::Simple),
+                Flag::Minimal => Some(ViewChoice::Minimal),
                 Flag::Interactive => {
                     cli.interactive = true;
                     None
@@ -208,10 +208,10 @@ pub fn parse(
             };
 
             if let Some(choice) = choice {
-                if chosen_display.is_some_and(|previous| previous != choice) {
+                if chosen_view.is_some_and(|previous| previous != choice) {
                     violations.push(CliViolation::ConflictingDisplays);
                 }
-                chosen_display = Some(choice);
+                chosen_view = Some(choice);
             }
 
             continue;
@@ -240,7 +240,7 @@ pub fn parse(
         });
     }
 
-    cli.display = chosen_display.unwrap_or_default();
+    cli.view = chosen_view.unwrap_or_default();
 
     if violations.is_empty() {
         Ok(cli)
@@ -299,7 +299,7 @@ mod tests {
     fn options_flags_and_commands_mix() {
         let cli = parse_args("--minimal --option.Hash 256 go nodes 1000").unwrap();
 
-        assert_eq!(cli.display, DisplayChoice::Minimal);
+        assert_eq!(cli.view, ViewChoice::Minimal);
         assert_eq!(
             cli.items,
             vec![option("Hash", "256"), command(&["go", "nodes", "1000"])]

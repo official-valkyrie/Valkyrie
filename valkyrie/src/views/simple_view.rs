@@ -40,31 +40,28 @@ use std::{
 };
 
 use valkyrie_chess::ChessBoard;
-use valkyrie_engine::{
-    engine::tree::components::{HasScore, HasVisits, Score},
-    prelude::*,
-};
+use valkyrie_engine::prelude::*;
 
 const REPORT_INTERVAL: u64 = 1000;
 const INTERVAL_CHECK_THRESHOLD: u64 = 128;
 const PERFT_SEPARATOR: &str = "-----------------------------------------------------------";
 
 #[derive(Debug, Default)]
-pub struct SimpleDisplay {
+pub struct SimpleView {
     last_avg_depth: AtomicU64,
     last_max_depth: AtomicU64,
     last_report_time: AtomicU64,
 }
 
-impl SimpleDisplay {
-    fn print_report<S: Score>(report: &SearchReport<S>) {
-        for (pv_idx, pv) in report.lines.iter().enumerate() {
-            let score = match pv.state().mate_in() {
+impl SimpleView {
+    fn print_report(report: &SearchReport) {
+        for (pv_idx, line) in report.lines.iter().enumerate() {
+            let score = match line.score.mate_in {
                 Some(moves) => format!("mate {moves}"),
-                None => format!("cp {}", pv.score().cp()),
+                None => format!("cp {}", line.score.cp),
             };
-            let moves: Vec<String> = pv
-                .moves()
+            let moves: Vec<String> = line
+                .moves
                 .iter()
                 .map(|mv| mv.to_string(report.chess960))
                 .collect();
@@ -82,81 +79,27 @@ impl SimpleDisplay {
             )
         }
     }
-
-    fn should_report(&self, stats: &SearchStats) -> bool {
-        stats.avg_depth() > self.last_avg_depth.load(Ordering::Relaxed)
-            || stats.max_depth() > self.last_max_depth.load(Ordering::Relaxed)
-            || (stats.iterations().is_multiple_of(INTERVAL_CHECK_THRESHOLD)
-                && stats.elapsed_ms()
-                    >= self.last_report_time.load(Ordering::Relaxed) + REPORT_INTERVAL)
-    }
-
-    fn report<C: EngineConfig>(&self, context: &SearchContext<C>, engine: &Engine<C>)
-    where
-        C::BestMove: BestMoveStrategy<C>,
-        C::Node: HasVisits,
-        C::Edge: HasScore + HasVisits,
-    {
-        let stats = context.stats();
-
-        self.last_avg_depth
-            .store(stats.avg_depth(), Ordering::Relaxed);
-        self.last_max_depth
-            .store(stats.max_depth(), Ordering::Relaxed);
-        self.last_report_time
-            .store(stats.elapsed_ms(), Ordering::Relaxed);
-
-        Self::print_report(&engine.report(context));
-    }
 }
 
-impl<C: EngineConfig> Display<C> for SimpleDisplay
-where
-    C::BestMove: BestMoveStrategy<C>,
-    C::Node: HasVisits,
-    C::Edge: HasScore + HasVisits,
-{
+impl View for SimpleView {
     fn message(&self, _level: MessageLevel, text: &str) {
         println!("{text}")
     }
 
-    fn identify(&self, name: &str, author: &str) {
-        println!("id name {name}");
-        println!("id author {author}");
-    }
-
-    fn option(&self, spec: &OptionSpec) {
-        let mut line = format!("option name {} type {}", spec.name, spec.kind.uci_name());
-
-        if spec.kind != OptionKind::Button {
-            let default = if spec.default.is_empty() {
-                "<empty>"
-            } else {
-                &spec.default
-            };
-
-            line += &format!(" default {default}");
-        }
-
-        if let Some((min, max)) = &spec.range
-            && (spec.kind == OptionKind::Spin || spec.tunable)
-        {
-            line += &format!(" min {min} max {max}");
-        }
-
-        println!("{line}")
-    }
-
-    fn handshake_done(&self) {
-        println!("uciok")
-    }
-
-    fn ready(&self) {
-        println!("readyok")
-    }
-
     fn board(&self, board: &ChessBoard) {
         println!("{board}")
+    }
+
+    fn position_changed(&self, _board: &ChessBoard) {
+        println!("Position set successfully")
+    }
+
+    fn option_changed(&self, name: &str, value: &str) {
+        println!("Option {name} has been set to {value}")
+    }
+
+    fn button_pressed(&self, name: &str) {
+        println!("Option {name} has been triggered")
     }
 
     fn perft_started(&self, board: &ChessBoard, depth: u8, bulk: bool) {
@@ -170,11 +113,8 @@ where
         println!("{PERFT_SEPARATOR}\n");
     }
 
-    fn perft_move(&self, mv: Move, nodes: u64, engine: &Engine<C>) {
-        println!(
-            "  {} - {nodes}",
-            mv.to_string(engine.params().general().chess960())
-        )
+    fn perft_move(&self, mv: Move, nodes: u64, chess960: bool) {
+        println!("  {} - {nodes}", mv.to_string(chess960))
     }
 
     fn perft_finished(&self, nodes: u64, elapsed: Duration) {
@@ -197,26 +137,40 @@ where
         );
     }
 
-    fn search_started(&self, _context: &SearchContext<C>, _engine: &Engine<C>) {
+    fn search_started(&self, _limits: &SearchLimits) {
         self.last_avg_depth.store(0, Ordering::Relaxed);
         self.last_max_depth.store(0, Ordering::Relaxed);
         self.last_report_time.store(0, Ordering::Relaxed);
     }
 
-    fn search_update(&self, context: &SearchContext<C>, engine: &Engine<C>) {
-        if self.should_report(context.stats()) {
-            self.report(context, engine);
+    fn wants_report(&self, stats: &SearchStats) -> bool {
+        let due = stats.avg_depth() > self.last_avg_depth.load(Ordering::Relaxed)
+            || stats.max_depth() > self.last_max_depth.load(Ordering::Relaxed)
+            || (stats.iterations().is_multiple_of(INTERVAL_CHECK_THRESHOLD)
+                && stats.elapsed_ms()
+                    >= self.last_report_time.load(Ordering::Relaxed) + REPORT_INTERVAL);
+
+        if due {
+            self.last_avg_depth
+                .store(stats.avg_depth(), Ordering::Relaxed);
+            self.last_max_depth
+                .store(stats.max_depth(), Ordering::Relaxed);
+            self.last_report_time
+                .store(stats.elapsed_ms(), Ordering::Relaxed);
         }
+
+        due
     }
 
-    fn search_ended(&self, context: &SearchContext<C>, engine: &Engine<C>) {
-        self.report(context, engine);
+    fn report(&self, report: &SearchReport) {
+        Self::print_report(report);
     }
 
-    fn best_move(&self, mv: Move, engine: &Engine<C>) {
-        println!(
-            "bestmove {}",
-            mv.to_string(engine.params().general().chess960())
-        )
+    fn search_ended(&self, report: &SearchReport) {
+        Self::print_report(report);
+    }
+
+    fn best_move(&self, mv: Move, chess960: bool) {
+        println!("bestmove {}", mv.to_string(chess960))
     }
 }

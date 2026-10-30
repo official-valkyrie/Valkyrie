@@ -34,9 +34,9 @@
     documentation.
 */
 
-use valkyrie_engine::prelude::*;
+use std::{sync::Arc, thread::JoinHandle};
 
-use crate::input::Input;
+use valkyrie_engine::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Category {
@@ -62,6 +62,7 @@ pub struct Command<C: EngineConfig> {
     pub aliases: &'static [&'static str],
     pub category: Category,
     pub cli: bool,
+    pub during_search: bool,
     pub usage: &'static str,
     pub description: &'static str,
     pub run: fn(&mut Shell<C>, &[&str]),
@@ -87,25 +88,100 @@ impl<C: EngineConfig> Registry<C> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dispatch {
+    Done,
+    Deferred,
+    Unknown,
+}
+
+struct Search {
+    handle: JoinHandle<(Option<Move>, SearchStats)>,
+    infinite: bool,
+}
+
 pub struct Shell<C: EngineConfig> {
-    pub engine: Engine<C>,
-    pub input: Input,
+    engine: Arc<Engine<C>>,
     pub registry: Registry<C>,
     pub shutdown: bool,
+    search: Option<Search>,
 }
 
 impl<C: EngineConfig> Shell<C> {
-    pub fn execute(&mut self, tokens: &[&str]) -> bool {
+    pub fn new(engine: Engine<C>, registry: Registry<C>) -> Self {
+        Self {
+            engine: Arc::new(engine),
+            registry,
+            shutdown: false,
+            search: None,
+        }
+    }
+
+    pub fn engine(&self) -> &Engine<C> {
+        &self.engine
+    }
+
+    pub fn engine_mut(&mut self) -> &mut Engine<C> {
+        Arc::get_mut(&mut self.engine).expect("the engine is shared while a search is running")
+    }
+
+    pub fn shared_engine(&self) -> &Arc<Engine<C>> {
+        &self.engine
+    }
+
+    pub fn start_search(
+        &mut self,
+        handle: JoinHandle<(Option<Move>, SearchStats)>,
+        infinite: bool,
+    ) {
+        self.search = Some(Search { handle, infinite });
+    }
+
+    pub fn is_searching(&self) -> bool {
+        self.search.is_some()
+    }
+
+    pub fn is_searching_infinitely(&self) -> bool {
+        self.search.as_ref().is_some_and(|search| search.infinite)
+    }
+
+    pub fn reap_search(&mut self) {
+        if self
+            .search
+            .as_ref()
+            .is_some_and(|search| search.handle.is_finished())
+        {
+            self.wait_for_search();
+        }
+    }
+
+    pub fn wait_for_search(&mut self) {
+        if let Some(search) = self.search.take() {
+            let _ = search.handle.join();
+        }
+    }
+
+    pub fn dispatch(&mut self, line: &str) -> Dispatch {
+        let tokens: Vec<&str> = line.split_whitespace().collect();
+
         let Some(&name) = tokens.first() else {
-            return false;
+            return Dispatch::Unknown;
         };
 
-        let Some(run) = self.registry.find(name).map(|command| command.run) else {
-            return false;
+        let Some((run, during_search)) = self
+            .registry
+            .find(name)
+            .map(|command| (command.run, command.during_search))
+        else {
+            return Dispatch::Unknown;
         };
+
+        if self.is_searching() && !during_search {
+            return Dispatch::Deferred;
+        }
 
         run(self, &tokens[1..]);
 
-        true
+        Dispatch::Done
     }
 }

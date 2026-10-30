@@ -34,20 +34,55 @@
     documentation.
 */
 
-use valkyrie_chess::ChessBoard;
+use valkyrie_chess::{ChessBoard, GameState, Move};
 
-use crate::engine::{Pv, SearchLimits};
+use crate::engine::{SearchLimits, SearchState, tree::components::Score};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReportScore {
+    pub cp: i32,
+    pub mate_in: Option<i32>,
+}
+
+impl ReportScore {
+    pub fn new(score: impl Score, state: GameState) -> Self {
+        Self {
+            cp: score.cp(),
+            mate_in: state.mate_in(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReportLine {
+    pub moves: Vec<Move>,
+    pub score: ReportScore,
+    pub visit_percent: f32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RootMove {
+    pub mv: Move,
+    pub visits: u64,
+    pub visit_percent: f32,
+    pub policy: f32,
+    pub score: Option<ReportScore>,
+}
 
 #[derive(Debug, Clone)]
-pub struct SearchReport<S> {
+pub struct SearchReport {
     pub limits: SearchLimits,
     pub root: ChessBoard,
     pub chess960: bool,
+    pub state: SearchState,
     pub time_ms: u64,
+    pub soft_limit_ms: Option<u64>,
+    pub hard_limit_ms: Option<u64>,
     pub depth: u64,
     pub seldepth: u64,
     pub nodes: u64,
     pub nps: u64,
     pub hashfull: usize,
-    pub lines: Vec<Pv<S>>,
+    pub lines: Vec<ReportLine>,
+    pub root_moves: Vec<RootMove>,
 }

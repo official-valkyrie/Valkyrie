@@ -53,6 +53,7 @@ impl MiscProcessor {
                 aliases: &["d"],
                 category: Category::Tools,
                 cli: true,
+                during_search: false,
                 usage: "draw",
                 description: "Show the current board",
                 run: Self::draw,
@@ -62,6 +63,7 @@ impl MiscProcessor {
                 aliases: &[],
                 category: Category::Tools,
                 cli: true,
+                during_search: false,
                 usage: "tunables",
                 description: "Print the tunable parameters in tuner format",
                 run: Self::tunables,
@@ -71,6 +73,7 @@ impl MiscProcessor {
                 aliases: &[],
                 category: Category::Tools,
                 cli: true,
+                during_search: false,
                 usage: "perft [DEPTH]",
                 description: "Count the legal-move tree with bulk counting",
                 run: Self::perft::<C, true>,
@@ -80,6 +83,7 @@ impl MiscProcessor {
                 aliases: &[],
                 category: Category::Tools,
                 cli: true,
+                during_search: false,
                 usage: "perft_no_bulk [DEPTH]",
                 description: "Count the legal-move tree without bulk counting",
                 run: Self::perft::<C, false>,
@@ -89,6 +93,7 @@ impl MiscProcessor {
                 aliases: &[],
                 category: Category::Tools,
                 cli: true,
+                during_search: false,
                 usage: "bench",
                 description: "Run the benchmark (not implemented yet)",
                 run: Self::bench,
@@ -98,6 +103,7 @@ impl MiscProcessor {
                 aliases: &["cls"],
                 category: Category::Tools,
                 cli: false,
+                during_search: false,
                 usage: "clear",
                 description: "Clear the terminal",
                 run: Self::clear_terminal_screen,
@@ -106,19 +112,19 @@ impl MiscProcessor {
     }
 
     fn draw<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
-        let engine = &shell.engine;
+        let engine = shell.engine();
 
-        engine.display().board(engine.position().board());
+        engine.view().board(engine.position().board());
     }
 
     fn tunables<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
-        let engine = &shell.engine;
+        let engine = shell.engine();
 
         engine.params().print_tunables(&|line| engine.print(line));
     }
 
     fn perft<C: EngineConfig, const BULK: bool>(shell: &mut Shell<C>, args: &[&str]) {
-        let engine = &shell.engine;
+        let engine = shell.engine();
 
         let depth = match parse_perft(args) {
             Ok(depth) => depth,
@@ -129,15 +135,16 @@ impl MiscProcessor {
         };
 
         let depth = depth.unwrap_or(DEFAULT_PERFT_DEPTH);
+        let chess960 = engine.params().general().chess960();
         let board = engine.position().board();
 
-        engine.display().perft_started(board, depth, BULK);
+        engine.view().perft_started(board, depth, BULK);
 
         let (nodes, duration) = valkyrie_chess::perft::<BULK>(board, Some(depth), |mv, nodes| {
-            engine.display().perft_move(mv, nodes, engine)
+            engine.view().perft_move(mv, nodes, chess960)
         });
 
-        engine.display().perft_finished(nodes, duration);
+        engine.view().perft_finished(nodes, duration);
     }
 
     fn bench<C: EngineConfig>(_shell: &mut Shell<C>, _args: &[&str]) {}

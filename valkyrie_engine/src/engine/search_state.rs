@@ -56,6 +56,16 @@ impl Default for AtomicSearchState {
 
 impl AtomicSearchState {
     #[inline]
+    pub fn get(&self) -> SearchState {
+        match self.0.load(Ordering::Relaxed) {
+            0 => SearchState::Idle,
+            1 => SearchState::Running,
+            2 => SearchState::Ended,
+            _ => SearchState::Interrupted,
+        }
+    }
+
+    #[inline]
     pub fn is(&self, state: SearchState) -> bool {
         self.0.load(Ordering::Relaxed) == state as u8
     }

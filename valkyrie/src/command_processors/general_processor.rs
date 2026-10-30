@@ -50,6 +50,7 @@ impl GeneralProcessor {
                 aliases: &["h"],
                 category: Category::General,
                 cli: true,
+                during_search: false,
                 usage: "help",
                 description: "Show this help",
                 run: Self::help,
@@ -59,6 +60,7 @@ impl GeneralProcessor {
                 aliases: &["V"],
                 category: Category::General,
                 cli: true,
+                during_search: false,
                 usage: "version",
                 description: "Show the engine name and version",
                 run: Self::version,
@@ -69,10 +71,10 @@ impl GeneralProcessor {
     fn help<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
         let text = help::render(shell);
 
-        shell.engine.print(&text);
+        shell.engine().print(&text);
     }
 
     fn version<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
-        shell.engine.print(env!("ENGINE_NAME"));
+        shell.engine().print(env!("ENGINE_NAME"));
     }
 }

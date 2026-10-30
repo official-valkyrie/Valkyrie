@@ -39,7 +39,6 @@ mod macros;
 pub mod builder;
 pub mod tree;
 
-mod display;
 mod payload;
 mod policy_entry;
 mod pv;
@@ -49,22 +48,25 @@ mod search_report;
 mod search_state;
 mod search_stats;
 mod strategy_params;
+mod view;
 
 pub use builder::{EngineBuilder, EngineConfig, EngineParams, GeneralParams, SearchStrategy};
-pub use display::{Display, MessageLevel, NoDisplay};
 pub use payload::{HasWdl, Payload, WinChance};
 pub use pv::Pv;
 pub use search_context::SearchContext;
 pub use search_limits::SearchLimits;
-pub use search_report::SearchReport;
+pub use search_report::{ReportLine, ReportScore, RootMove, SearchReport};
+pub use search_state::SearchState;
 pub use search_stats::SearchStats;
 pub use strategy_params::{
     EmptyParams, OptionKind, OptionNames, OptionSpec, OptionViolation, StrategyParams,
     UciOptionType,
 };
+pub use view::{MessageLevel, NoView, View};
 
 use std::{
-    thread::{Scope, ScopedJoinHandle},
+    sync::Arc,
+    thread::{self, JoinHandle},
     time::Duration,
 };
 
@@ -72,10 +74,10 @@ use valkyrie_chess::{ChessBoard, ChessPosition, FEN, GameState, Move};
 
 use crate::engine::{
     builder::{BestMoveStrategy, TimeManagerStrategy},
-    search_state::{AtomicSearchState, SearchState},
+    search_state::AtomicSearchState,
     tree::{
         Tree,
-        components::{HasChild, HasGameState, HasMove, HasScore, HasVisits, NodeType},
+        components::{HasChild, HasGameState, HasMove, HasPolicy, HasScore, HasVisits, NodeType},
     },
 };
 
@@ -89,7 +91,7 @@ pub struct Engine<C: EngineConfig> {
     position: ChessPosition,
     search_state: AtomicSearchState,
     tree: Tree<C::Node>,
-    display: Box<dyn Display<C>>,
+    view: Box<dyn View>,
 }
 
 impl<C: EngineConfig> Engine<C> {
@@ -101,7 +103,7 @@ impl<C: EngineConfig> Engine<C> {
             position: ChessPosition::from(ChessBoard::from(&FEN::start_position())),
             search_state: AtomicSearchState::default(),
             tree,
-            display: Box::new(NoDisplay),
+            view: Box::new(NoView),
         }
     }
 
@@ -174,22 +176,33 @@ impl<C: EngineConfig> Engine<C> {
     }
 
     #[inline]
-    pub fn display(&self) -> &dyn Display<C> {
-        self.display.as_ref()
+    pub fn search_state(&self) -> SearchState {
+        self.search_state.get()
     }
 
-    pub fn set_display(&mut self, display: impl Display<C> + 'static) {
-        self.display = Box::new(display);
+    pub fn search_update(&self, context: &SearchContext<C>) {
+        if self.view.wants_report(context.stats()) {
+            self.view.report(&context.report(self));
+        }
+    }
+
+    #[inline]
+    pub fn view(&self) -> &dyn View {
+        self.view.as_ref()
+    }
+
+    pub fn set_view(&mut self, view: impl View + 'static) {
+        self.view = Box::new(view);
     }
 
     #[inline]
     pub fn print(&self, text: &str) {
-        self.display.message(MessageLevel::Info, text)
+        self.view.message(MessageLevel::Info, text)
     }
 
     #[inline]
     pub fn print_error(&self, text: &str) {
-        self.display.message(MessageLevel::Error, text)
+        self.view.message(MessageLevel::Error, text)
     }
 }
 
@@ -198,20 +211,25 @@ where
     C::Search: SearchStrategy<C>,
     C::TimeManager: TimeManagerStrategy<C>,
     C::BestMove: BestMoveStrategy<C>,
+    C::Node: HasVisits,
+    C::Edge: HasScore + HasVisits + HasPolicy,
 {
     pub fn search(&self, limits: &SearchLimits) -> (Option<Move>, SearchStats) {
         self.search_state.set(SearchState::Running);
-        self.run_search(SearchContext::new(limits, self))
+        self.run_search(SearchContext::new(limits, self, Self::report))
     }
 
-    pub fn spawn_search<'scope, 'env>(
-        &'env self,
-        scope: &'scope Scope<'scope, 'env>,
-        limits: &'env SearchLimits,
-    ) -> ScopedJoinHandle<'scope, (Option<Move>, SearchStats)> {
+    pub fn spawn_search(
+        self: &Arc<Self>,
+        limits: SearchLimits,
+    ) -> JoinHandle<(Option<Move>, SearchStats)> {
         self.search_state.set(SearchState::Running);
-        let context = SearchContext::new(limits, self);
-        scope.spawn(move || self.run_search(context))
+        let engine = Arc::clone(self);
+
+        thread::spawn(move || {
+            let context = SearchContext::new(&limits, &engine, Self::report);
+            engine.run_search(context)
+        })
     }
 
     fn run_search(&self, context: SearchContext<C>) -> (Option<Move>, SearchStats) {
@@ -225,7 +243,8 @@ where
                 self.wait_for_interrupt();
             }
 
-            self.display.best_move(best_move, self);
+            self.view
+                .best_move(best_move, self.params.general().chess960());
         }
 
         self.search_state.set(SearchState::Idle);
@@ -245,11 +264,11 @@ where
 
         self.tree.clear();
 
-        self.display.search_started(context, self);
+        self.view.search_started(context.limits());
 
         C::Search::execute(context, self.params().search(), self);
 
-        self.display.search_ended(context, self);
+        self.view.search_ended(&context.report(self));
 
         Some(self.best_move().unwrap_or(first_move))
     }
@@ -327,20 +346,25 @@ where
             .map(|edge_idx| root.edges()[edge_idx].mv())
     }
 
-    pub fn report(&self, context: &SearchContext<C>) -> SearchReport<<C::Edge as HasScore>::Score>
+    pub fn report(&self, context: &SearchContext<C>) -> SearchReport
     where
+        C::TimeManager: TimeManagerStrategy<C>,
         C::Node: HasVisits,
-        C::Edge: HasScore + HasVisits,
+        C::Edge: HasScore + HasVisits + HasPolicy,
     {
         let stats = context.stats();
         let time_ms = stats.elapsed_ms();
         let nodes = stats.iterations();
+        let time_manager = context.time_manager();
 
         SearchReport {
             limits: context.limits().clone(),
             root: *self.position.board(),
             chess960: self.params.general().chess960(),
+            state: self.search_state(),
             time_ms,
+            soft_limit_ms: time_manager.soft_limit_ms(),
+            hard_limit_ms: time_manager.hard_limit_ms(),
             depth: stats.avg_depth(),
             seldepth: stats.max_depth(),
             nodes,
@@ -349,8 +373,48 @@ where
             lines: (0..)
                 .map_while(|pv_idx| self.pv(pv_idx))
                 .take(self.params.general().multi_pv())
+                .map(|pv| ReportLine {
+                    moves: pv.moves().to_vec(),
+                    score: ReportScore::new(pv.score(), pv.state()),
+                    visit_percent: pv.visit_percent(),
+                })
                 .collect(),
+            root_moves: self.root_moves(),
         }
+    }
+
+    fn root_moves(&self) -> Vec<RootMove>
+    where
+        C::Node: HasVisits,
+        C::Edge: HasScore + HasVisits + HasPolicy,
+    {
+        let tree = self.tree();
+        let root = tree.root_node();
+        let root_visits = root.visits().max(1) as f32;
+
+        let mut moves: Vec<RootMove> = root
+            .edges()
+            .iter()
+            .map(|edge| {
+                let visits = edge.visits();
+                let state = if edge.has_child() {
+                    tree[edge.child()].game_state().for_parent()
+                } else {
+                    GameState::Ongoing
+                };
+
+                RootMove {
+                    mv: edge.mv(),
+                    visits,
+                    visit_percent: visits as f32 * 100.0 / root_visits,
+                    policy: edge.policy(),
+                    score: (visits > 0).then(|| ReportScore::new(edge.score(), state)),
+                }
+            })
+            .collect();
+
+        moves.sort_by(|lhs, rhs| rhs.visits.cmp(&lhs.visits));
+        moves
     }
 
     pub fn pv(&self, pv_idx: usize) -> Option<Pv<<C::Edge as HasScore>::Score>>

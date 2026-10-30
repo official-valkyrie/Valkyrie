@@ -37,15 +37,17 @@
 mod cli;
 mod command_processors;
 mod commands;
-mod displays;
+mod frontends;
 mod help;
 mod input;
+mod uci_protocol;
+mod views;
 
-use cli::{DisplayChoice, Item, Lookup};
+use std::process::ExitCode;
+
+use cli::{Lookup, ViewChoice};
 use command_processors::print_violations;
-use commands::Shell;
-use displays::{minimal_display::MinimalDisplay, simple_display::SimpleDisplay};
-use input::Input;
+use frontends::uci_frontend::UciFrontend;
 use valkyrie_engine::engine::builder::backpropagation_strategy::BasicScalarBackpropagate;
 use valkyrie_engine::engine::builder::best_move_strategy::MaxQ;
 use valkyrie_engine::engine::builder::expansion_strategy::ClassicExpansion;
@@ -53,12 +55,15 @@ use valkyrie_engine::engine::builder::exploration_strategy::Puct;
 use valkyrie_engine::engine::builder::search_strategy::BasicSequentialMCTS;
 use valkyrie_engine::engine::builder::simulation_strategy::MaterialEvaluation;
 use valkyrie_engine::engine::builder::time_manager_strategy::SimpleTimeManager;
-use valkyrie_engine::engine::tree::components::{HasScore, HasVisits};
+use valkyrie_engine::engine::tree::components::{HasPolicy, HasScore, HasVisits};
 use valkyrie_engine::engine::tree::edges::AvgScoreEdge;
 use valkyrie_engine::engine::tree::nodes::ClassicNode;
 use valkyrie_engine::prelude::*;
+use views::{minimal_view::MinimalView, simple_view::SimpleView};
 
-fn main() {
+const USAGE_ERROR: u8 = 2;
+
+fn main() -> ExitCode {
     let engine = EngineBuilder::new()
         .best_move::<MaxQ>()
         .exploration::<Puct>()
@@ -70,16 +75,16 @@ fn main() {
         .node::<ClassicNode<AvgScoreEdge>>()
         .build();
 
-    run(engine);
+    run(engine)
 }
 
-fn run<C: EngineConfig>(engine: Engine<C>)
+fn run<C: EngineConfig>(mut engine: Engine<C>) -> ExitCode
 where
     C::Search: SearchStrategy<C>,
     C::TimeManager: TimeManagerStrategy<C>,
     C::BestMove: BestMoveStrategy<C>,
     C::Node: HasVisits,
-    C::Edge: HasScore + HasVisits,
+    C::Edge: HasScore + HasVisits + HasPolicy,
 {
     let registry = command_processors::registry::<C>();
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -94,64 +99,21 @@ where
             })
     });
 
-    let mut shell = Shell {
-        engine,
-        input: Input::spawn(),
-        registry,
-        shutdown: false,
-    };
-
     let cli = match parsed {
         Ok(cli) => cli,
         Err(violations) => {
-            shell.engine.set_display(SimpleDisplay::default());
-            print_violations(&shell.engine, &violations);
-            std::process::exit(2);
+            engine.set_view(SimpleView::default());
+            print_violations(&engine, &violations);
+            return ExitCode::from(USAGE_ERROR);
         }
     };
 
-    match cli.display {
-        DisplayChoice::Simple => shell.engine.set_display(SimpleDisplay::default()),
-        DisplayChoice::Minimal => shell.engine.set_display(MinimalDisplay::default()),
+    match cli.view {
+        ViewChoice::Simple => engine.set_view(SimpleView::default()),
+        ViewChoice::Minimal => engine.set_view(MinimalView::default()),
     }
 
-    let mut ran_command = false;
+    UciFrontend::new(engine, registry).run(&cli);
 
-    for item in &cli.items {
-        match item {
-            Item::SetOption { name, value } => {
-                let mut tokens = vec!["setoption", "name", name.as_str()];
-
-                if !value.is_empty() {
-                    tokens.extend(["value", value.as_str()]);
-                }
-
-                shell.execute(&tokens);
-            }
-            Item::Command(tokens) => {
-                let tokens: Vec<&str> = tokens.iter().map(String::as_str).collect();
-
-                ran_command = true;
-                shell.execute(&tokens);
-            }
-        }
-
-        if shell.shutdown {
-            return;
-        }
-    }
-
-    if ran_command && !cli.interactive {
-        return;
-    }
-
-    while !shell.shutdown {
-        let Some(line) = shell.input.next() else {
-            break;
-        };
-
-        let tokens: Vec<&str> = line.split_whitespace().collect();
-
-        shell.execute(&tokens);
-    }
+    ExitCode::SUCCESS
 }

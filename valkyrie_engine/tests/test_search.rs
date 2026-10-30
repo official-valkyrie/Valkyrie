@@ -34,6 +34,8 @@
     documentation.
 */
 
+use std::sync::{Arc, Mutex};
+
 use valkyrie_chess::{ChessBoard, ChessPosition, FEN, Move};
 use valkyrie_engine::{
     engine::builder::{
@@ -248,4 +250,125 @@ fn without_a_clock_time_never_runs_out() {
     let engine = engine!();
 
     assert!(!hard_limit_at(&engine, &SearchLimits::default(), u64::MAX));
+}
+
+#[derive(Debug, Clone, Default)]
+struct RecordingView {
+    progress: Arc<Mutex<Vec<SearchReport>>>,
+    finals: Arc<Mutex<Vec<SearchReport>>>,
+}
+
+impl View for RecordingView {
+    fn wants_report(&self, stats: &SearchStats) -> bool {
+        stats.iterations().is_multiple_of(100)
+    }
+
+    fn report(&self, report: &SearchReport) {
+        self.progress.lock().unwrap().push(report.clone());
+    }
+
+    fn search_ended(&self, report: &SearchReport) {
+        self.finals.lock().unwrap().push(report.clone());
+    }
+}
+
+fn recorded_search(fen: &str, limits: &SearchLimits) -> RecordingView {
+    let mut engine = engine!();
+    let view = RecordingView::default();
+
+    engine.set_position(&position(fen));
+    engine.set_view(view.clone());
+    engine.search(limits);
+
+    view
+}
+
+#[test]
+fn final_report_has_a_complete_root_move_table() {
+    let view = recorded_search(
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        &node_limit(2000),
+    );
+    let finals = view.finals.lock().unwrap();
+    let report = finals.last().unwrap();
+
+    assert_eq!(finals.len(), 1);
+    assert_eq!(report.nodes, 2000);
+    assert_eq!(report.lines.len(), 1);
+    assert_eq!(report.root_moves.len(), 20);
+    assert_eq!(
+        report
+            .root_moves
+            .iter()
+            .map(|root| root.visits)
+            .sum::<u64>(),
+        report.nodes
+    );
+    assert!(
+        report
+            .root_moves
+            .windows(2)
+            .all(|pair| pair[0].visits >= pair[1].visits)
+    );
+    assert_eq!(report.root_moves[0].mv, report.lines[0].moves[0]);
+    assert!(
+        report
+            .root_moves
+            .iter()
+            .all(|root| root.score.is_some() == (root.visits > 0))
+    );
+    assert!(
+        (report
+            .root_moves
+            .iter()
+            .map(|root| root.policy)
+            .sum::<f32>()
+            - 1.0)
+            .abs()
+            < 1e-3
+    );
+}
+
+#[test]
+fn view_chooses_how_often_it_gets_progress_reports() {
+    let view = recorded_search(
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        &node_limit(1000),
+    );
+
+    let progress = view.progress.lock().unwrap();
+
+    assert_eq!(progress.len(), 10);
+    assert!(
+        progress
+            .iter()
+            .all(|report| report.state == SearchState::Running)
+    );
+    assert!(
+        progress
+            .windows(2)
+            .all(|pair| pair[0].nodes < pair[1].nodes)
+    );
+}
+
+#[test]
+fn report_carries_the_time_budget() {
+    let mut move_time = SearchLimits::default();
+    move_time.set_move_time(Some(50));
+
+    let view = recorded_search("4k3/8/8/8/8/8/8/4K2R w K - 0 1", &move_time);
+    assert_eq!(view.finals.lock().unwrap()[0].hard_limit_ms, Some(50));
+
+    let view = recorded_search("4k3/8/8/8/8/8/8/4K2R w K - 0 1", &node_limit(100));
+    assert_eq!(view.finals.lock().unwrap()[0].hard_limit_ms, None);
+}
+
+#[test]
+fn report_scores_a_found_mate() {
+    let view = recorded_search("6k1/5ppp/8/8/8/8/8/R3K3 w - - 0 1", &node_limit(5000));
+    let finals = view.finals.lock().unwrap();
+    let line = &finals[0].lines[0];
+
+    assert_eq!(line.moves[0].to_string(false), "a1a8");
+    assert_eq!(line.score.mate_in, Some(1));
 }

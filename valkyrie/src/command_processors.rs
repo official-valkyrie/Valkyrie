@@ -43,7 +43,10 @@ pub mod uci_processor;
 
 use std::fmt::Display;
 
-use valkyrie_engine::prelude::*;
+use valkyrie_engine::{
+    engine::tree::components::{HasPolicy, HasScore, HasVisits},
+    prelude::*,
+};
 
 use crate::commands::Registry;
 use general_processor::GeneralProcessor;
@@ -55,6 +58,8 @@ where
     C::Search: SearchStrategy<C>,
     C::TimeManager: TimeManagerStrategy<C>,
     C::BestMove: BestMoveStrategy<C>,
+    C::Node: HasVisits,
+    C::Edge: HasScore + HasVisits + HasPolicy,
 {
     let mut commands = UciProcessor::commands();
     commands.extend(MiscProcessor::commands());

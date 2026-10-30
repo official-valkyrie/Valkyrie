@@ -43,4 +43,12 @@ pub trait TimeManagerStrategy<C: EngineConfig>: Strategy {
     fn new(limits: &SearchLimits, params: &Self::Params, engine: &Engine<C>) -> Self;
     fn soft_limit(&self, time_passed: u64, params: &Self::Params, engine: &Engine<C>) -> bool;
     fn hard_limit(&self, time_passed: u64, params: &Self::Params, engine: &Engine<C>) -> bool;
+
+    fn soft_limit_ms(&self) -> Option<u64> {
+        None
+    }
+
+    fn hard_limit_ms(&self) -> Option<u64> {
+        None
+    }
 }
