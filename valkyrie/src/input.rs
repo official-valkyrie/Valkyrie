@@ -42,6 +42,8 @@ use std::{
     time::Duration,
 };
 
+use crate::interrupt;
+
 pub enum Poll {
     Line(String),
     Idle,
@@ -60,12 +62,18 @@ impl Input {
         thread::spawn(move || {
             let mut line = String::new();
 
-            while matches!(stdin().read_line(&mut line), Ok(read) if read > 0) {
-                if sender.send(line.trim().to_string()).is_err() {
-                    break;
-                }
+            loop {
+                match stdin().read_line(&mut line) {
+                    Ok(0) | Err(_) if interrupt::was_swallowed() => continue,
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {
+                        if sender.send(line.trim().to_string()).is_err() {
+                            break;
+                        }
 
-                line.clear();
+                        line.clear();
+                    }
+                }
             }
         });
 

@@ -42,6 +42,7 @@ use crate::{
     cli::{Cli, Item},
     commands::{Dispatch, Registry, Shell},
     input::{Input, Poll},
+    interrupt,
 };
 
 const POLL_INTERVAL: Duration = Duration::from_millis(1);
@@ -62,6 +63,7 @@ impl<C: EngineConfig> UciFrontend<C> {
     }
 
     pub fn run(mut self, cli: &Cli) {
+        interrupt::install();
         self.shell.engine().view().start();
 
         let mut ran_command = false;
@@ -98,6 +100,10 @@ impl<C: EngineConfig> UciFrontend<C> {
                 && (self.shell.shutdown || (self.exit_when_idle && !self.input.has_queued()))
             {
                 break;
+            }
+
+            if searching && interrupt::take_stop_request() {
+                self.shell.engine().stop();
             }
 
             let line = if searching {

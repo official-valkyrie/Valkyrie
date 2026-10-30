@@ -40,6 +40,7 @@ mod commands;
 mod frontends;
 mod help;
 mod input;
+mod interrupt;
 mod uci_protocol;
 mod views;
 

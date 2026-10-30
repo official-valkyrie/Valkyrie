@@ -38,6 +38,8 @@ use std::{sync::Arc, thread::JoinHandle};
 
 use valkyrie_engine::prelude::*;
 
+use crate::interrupt;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Category {
     Uci,
@@ -134,6 +136,7 @@ impl<C: EngineConfig> Shell<C> {
         handle: JoinHandle<(Option<Move>, SearchStats)>,
         infinite: bool,
     ) {
+        interrupt::set_searching(true);
         self.search = Some(Search { handle, infinite });
     }
 
@@ -158,6 +161,7 @@ impl<C: EngineConfig> Shell<C> {
     pub fn wait_for_search(&mut self) {
         if let Some(search) = self.search.take() {
             let _ = search.handle.join();
+            interrupt::set_searching(false);
         }
     }
 
