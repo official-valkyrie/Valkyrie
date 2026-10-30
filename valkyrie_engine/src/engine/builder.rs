@@ -38,7 +38,6 @@ pub mod backpropagation_strategy;
 pub mod best_move_strategy;
 pub mod expansion_strategy;
 pub mod exploration_strategy;
-pub mod payload;
 pub mod search_strategy;
 pub mod simulation_strategy;
 pub mod time_manager_strategy;
@@ -47,7 +46,6 @@ pub use self::backpropagation_strategy::BackpropagationStrategy;
 pub use self::best_move_strategy::BestMoveStrategy;
 pub use self::expansion_strategy::ExpansionStrategy;
 pub use self::exploration_strategy::ExplorationStrategy;
-pub use self::payload::{HasWdl, Payload, WinChance};
 pub use self::search_strategy::SearchStrategy;
 pub use self::simulation_strategy::SimulationStrategy;
 pub use self::time_manager_strategy::TimeManagerStrategy;
@@ -64,6 +62,7 @@ crate::define_strategy_params! {
     GeneralParams {
         Options {
             ["Hash"] hash: i32 => 1024, 1, 524288;
+            ["MultiPV"] multi_pv: usize => 1, 1, 256;
             ["UCI_Chess960"] chess960: bool => false;
             ["ItersAsNodes"] iters_as_nodes: bool => true;
         }
@@ -76,7 +75,6 @@ crate::define_strategy_params! {
 crate::define_engine_config! {
     general: GeneralParams,
     strategies {
-        //Type           Trait                   Field/Name        Default Value
         BestMove:        BestMoveStrategy      | best_move       | Unspecified,
         Exploration:     ExplorationStrategy   | exploration     | Unspecified,
         Expansion:       ExpansionStrategy     | expansion       | Unspecified,

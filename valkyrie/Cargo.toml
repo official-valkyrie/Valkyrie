@@ -16,9 +16,6 @@ path = "src/main.rs"
 valkyrie_engine = { workspace = true }
 valkyrie_chess = { workspace = true }
 
-[build-dependencies]
-chrono = "0.4"
-
 [features]
 debug = ["valkyrie_engine/debug"]
 release = ["valkyrie_engine/release"]

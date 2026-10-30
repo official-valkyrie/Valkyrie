@@ -60,13 +60,6 @@ impl<E: EdgeType> EdgesStore<E> {
     }
 }
 
-impl<E: EdgeType> Clone for EdgesStore<E> {
-    #[inline]
-    fn clone(&self) -> Self {
-        Self(RwLock::new(self.read().clone()))
-    }
-}
-
 #[macro_export]
 macro_rules! connect_edges {
     ($name:ident) => {

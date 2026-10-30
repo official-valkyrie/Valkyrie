@@ -39,17 +39,21 @@ mod macros;
 pub mod builder;
 pub mod tree;
 
+mod payload;
 mod policy_entry;
 mod pv;
 mod reporter;
+mod search_context;
 mod search_limits;
 mod search_state;
 mod search_stats;
 mod strategy_params;
 
 pub use builder::{EngineBuilder, EngineConfig, EngineParams, GeneralParams, SearchStrategy};
+pub use payload::{HasWdl, Payload, WinChance};
 pub use pv::Pv;
 pub use reporter::{NoReporter, Reporter};
+pub use search_context::SearchContext;
 pub use search_limits::SearchLimits;
 pub use search_stats::SearchStats;
 pub use strategy_params::{
@@ -193,10 +197,12 @@ impl<C: EngineConfig> Engine<C> {
 impl<C: EngineConfig> Engine<C>
 where
     C::Search: SearchStrategy<C>,
+    C::TimeManager: TimeManagerStrategy<C>,
+    C::BestMove: BestMoveStrategy<C>,
 {
     pub fn search(&self, limits: &SearchLimits) -> (Option<Move>, SearchStats) {
         self.search_state.set(SearchState::Running);
-        self.run_search(limits)
+        self.run_search(SearchContext::new(limits, self))
     }
 
     pub fn spawn_search<'scope, 'env>(
@@ -205,17 +211,18 @@ where
         limits: &'env SearchLimits,
     ) -> ScopedJoinHandle<'scope, (Option<Move>, SearchStats)> {
         self.search_state.set(SearchState::Running);
-        scope.spawn(move || self.run_search(limits))
+        let context = SearchContext::new(limits, self);
+        scope.spawn(move || self.run_search(context))
     }
 
-    fn run_search(&self, limits: &SearchLimits) -> (Option<Move>, SearchStats) {
-        let (best_move, stats) = self.choose_move(limits);
+    fn run_search(&self, context: SearchContext<C>) -> (Option<Move>, SearchStats) {
+        let best_move = self.choose_move(&context);
 
         self.search_state
             .transition(SearchState::Running, SearchState::Ended);
 
         if let Some(best_move) = best_move {
-            if limits.is_infinite() {
+            if context.limits().is_infinite() {
                 self.wait_for_interrupt();
             }
 
@@ -224,28 +231,28 @@ where
 
         self.search_state.set(SearchState::Idle);
 
-        (best_move, stats)
+        (best_move, context.into_stats())
     }
 
-    fn choose_move(&self, limits: &SearchLimits) -> (Option<Move>, SearchStats) {
+    fn choose_move(&self, context: &SearchContext<C>) -> Option<Move> {
         let Some(first_move) = self.first_legal_move() else {
             self.print("Illegal position: no legal moves");
-            return (None, SearchStats::new());
+            return None;
         };
 
         if self.position.game_state(&self.position) != GameState::Ongoing {
-            return (Some(first_move), SearchStats::new());
+            return Some(first_move);
         }
 
         self.tree.clear();
 
-        self.reporter.search_started(limits, self);
+        self.reporter.search_started(context.limits(), self);
 
-        let (best_move, stats) = C::Search::execute(limits, self.params().search(), self);
+        C::Search::execute(context, self.params().search(), self);
 
-        self.reporter.search_ended(&stats, self);
+        self.reporter.search_ended(context.stats(), self);
 
-        (Some(best_move), stats)
+        Some(self.best_move().unwrap_or(first_move))
     }
 
     fn first_legal_move(&self) -> Option<Move> {
@@ -271,13 +278,11 @@ impl<C: EngineConfig> Engine<C>
 where
     C::TimeManager: TimeManagerStrategy<C>,
 {
-    pub fn should_stop(
-        &self,
-        iterations: u64,
-        limits: &SearchLimits,
-        stats: &SearchStats,
-        time_manager: &C::TimeManager,
-    ) -> bool {
+    pub fn should_stop(&self, context: &SearchContext<C>) -> bool {
+        let (limits, stats, time_manager) =
+            (context.limits(), context.stats(), context.time_manager());
+        let iterations = stats.iterations();
+
         if self.is_stopped() {
             return true;
         }
@@ -290,10 +295,7 @@ where
             return false;
         }
 
-        if limits
-            .nodes()
-            .is_some_and(|nodes| stats.iterations() >= nodes)
-        {
+        if limits.nodes().is_some_and(|nodes| iterations >= nodes) {
             return true;
         }
 
@@ -319,11 +321,11 @@ impl<C: EngineConfig> Engine<C>
 where
     C::BestMove: BestMoveStrategy<C>,
 {
-    pub fn best_move(&self) -> Move {
+    pub fn best_move(&self) -> Option<Move> {
         let root = self.tree().root_node();
 
         C::BestMove::execute(root, 0, self.params().best_move(), self)
-            .map_or(Move::NULL, |edge_idx| root.edges()[edge_idx].mv())
+            .map(|edge_idx| root.edges()[edge_idx].mv())
     }
 
     pub fn pv(&self, pv_idx: usize) -> Option<Pv<<C::Edge as HasScore>::Score>>

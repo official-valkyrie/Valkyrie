@@ -34,13 +34,44 @@
     documentation.
 */
 
-#[macro_export]
-macro_rules! register_strategy {
-    ($( $mod_name:ident ),+ $(,)?) => {
-        $(
-            pub mod $mod_name;
-            #[allow(unused_imports)]
-            pub use self::$mod_name::*;
-        )+
-    };
+use crate::prelude::*;
+
+pub struct SearchContext<'a, C: EngineConfig> {
+    limits: &'a SearchLimits,
+    stats: SearchStats,
+    time_manager: C::TimeManager,
+}
+
+impl<'a, C: EngineConfig> SearchContext<'a, C>
+where
+    C::TimeManager: TimeManagerStrategy<C>,
+{
+    pub(crate) fn new(limits: &'a SearchLimits, engine: &Engine<C>) -> Self {
+        Self {
+            limits,
+            stats: SearchStats::new(),
+            time_manager: C::TimeManager::new(limits, engine.params().time_manager(), engine),
+        }
+    }
+}
+
+impl<C: EngineConfig> SearchContext<'_, C> {
+    #[inline]
+    pub fn limits(&self) -> &SearchLimits {
+        self.limits
+    }
+
+    #[inline]
+    pub fn stats(&self) -> &SearchStats {
+        &self.stats
+    }
+
+    #[inline]
+    pub fn time_manager(&self) -> &C::TimeManager {
+        &self.time_manager
+    }
+
+    pub(crate) fn into_stats(self) -> SearchStats {
+        self.stats
+    }
 }

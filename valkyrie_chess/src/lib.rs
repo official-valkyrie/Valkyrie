@@ -60,35 +60,38 @@ pub use board::ChessPosition;
 pub const DEFAULT_PERFT_DEPTH: u8 = 5;
 pub const HALF_MOVE_LIMIT: u8 = 100;
 
-pub fn perft<const BULK: bool, const SPLIT: bool, const CHESS_960: bool>(
+pub fn perft<const BULK: bool>(
     board: &ChessBoard,
     depth: Option<u8>,
+    mut on_root_move: impl FnMut(Move, u64),
 ) -> (u64, Duration) {
     let timer = Instant::now();
-    let mask = board.castle_rights().get_castle_mask();
-    let result: u64 = if board.side() == Side::WHITE {
-        perft_internal_white::<BULK, SPLIT, CHESS_960>(
-            board,
-            depth.unwrap_or(DEFAULT_PERFT_DEPTH),
-            &mask,
-        )
-    } else {
-        perft_internal_black::<BULK, SPLIT, CHESS_960>(
-            board,
-            depth.unwrap_or(DEFAULT_PERFT_DEPTH),
-            &mask,
-        )
-    };
-    let duration = timer.elapsed();
+    let depth = depth.unwrap_or(DEFAULT_PERFT_DEPTH);
 
-    (result, duration)
+    if depth == 0 {
+        return (1, timer.elapsed());
+    }
+
+    let mask = board.castle_rights().get_castle_mask();
+    let count_child = if board.side() == Side::WHITE {
+        perft_internal_black::<BULK>
+    } else {
+        perft_internal_white::<BULK>
+    };
+    let mut node_count = 0u64;
+
+    board.map_legal_moves(|mv| {
+        let mut board_copy = *board;
+        board_copy.make_move(mv, &mask);
+        let result = count_child(&board_copy, depth - 1, &mask);
+        node_count += result;
+        on_root_move(mv, result);
+    });
+
+    (node_count, timer.elapsed())
 }
 
-fn perft_internal_white<const BULK: bool, const SPLIT: bool, const CHESS_960: bool>(
-    board: &ChessBoard,
-    depth: u8,
-    mask: &[u8; 64],
-) -> u64 {
+fn perft_internal_white<const BULK: bool>(board: &ChessBoard, depth: u8, mask: &[u8; 64]) -> u64 {
     let mut node_count = 0u64;
 
     if depth == 0 {
@@ -102,22 +105,13 @@ fn perft_internal_white<const BULK: bool, const SPLIT: bool, const CHESS_960: bo
     board.map_legal_moves_templated::<_, 0>(|mv| {
         let mut board_copy = *board;
         board_copy.make_move_templated::<0>(mv, mask);
-        let result = perft_internal_black::<BULK, false, CHESS_960>(&board_copy, depth - 1, mask);
-        node_count += result;
-
-        if SPLIT {
-            println!("  {} - {result}", mv.to_string(CHESS_960))
-        }
+        node_count += perft_internal_black::<BULK>(&board_copy, depth - 1, mask);
     });
 
     node_count
 }
 
-fn perft_internal_black<const BULK: bool, const SPLIT: bool, const CHESS_960: bool>(
-    board: &ChessBoard,
-    depth: u8,
-    mask: &[u8; 64],
-) -> u64 {
+fn perft_internal_black<const BULK: bool>(board: &ChessBoard, depth: u8, mask: &[u8; 64]) -> u64 {
     let mut node_count = 0u64;
 
     if depth == 0 {
@@ -131,12 +125,7 @@ fn perft_internal_black<const BULK: bool, const SPLIT: bool, const CHESS_960: bo
     board.map_legal_moves_templated::<_, 1>(|mv| {
         let mut board_copy = *board;
         board_copy.make_move_templated::<1>(mv, mask);
-        let result = perft_internal_white::<BULK, false, CHESS_960>(&board_copy, depth - 1, mask);
-        node_count += result;
-
-        if SPLIT {
-            println!("  {} - {result}", mv.to_string(CHESS_960))
-        }
+        node_count += perft_internal_white::<BULK>(&board_copy, depth - 1, mask);
     });
 
     node_count

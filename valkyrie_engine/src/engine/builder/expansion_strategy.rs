@@ -36,7 +36,8 @@
 
 use crate::{engine::policy_entry::PolicyEntry, prelude::*};
 
-crate::register_strategy!(classic_expansion);
+pub mod classic_expansion;
+pub use self::classic_expansion::*;
 
 pub trait ExpansionStrategy<C: EngineConfig>: Strategy {
     fn execute(

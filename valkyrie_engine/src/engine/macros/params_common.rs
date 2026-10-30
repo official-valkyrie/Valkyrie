@@ -156,7 +156,7 @@ macro_rules! __params_set_variables {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __params_print_options {
-    ($self_:ident;
+    ($self_:ident, $print:ident;
      $( [$key:literal] $field:ident : $ty:ty => $default:expr $(, $min:expr, $max:expr)?; )*) => {
         $(
             {
@@ -164,14 +164,16 @@ macro_rules! __params_print_options {
                 if default_str.is_empty() {
                     default_str = "<empty>".to_string();
                 }
-                print!(
-                    "option name {} type {} default {}",
-                    $key,
-                    <$ty as $crate::UciOptionType>::UCI_TYPE,
-                    default_str
-                );
-                $( print!(" min {} max {}", $min, $max); )?
-                println!();
+                let uci_type = <$ty as $crate::UciOptionType>::UCI_TYPE;
+                let line = format!("option name {} type {uci_type} default {default_str}", $key);
+                $(
+                    let line = if uci_type == "spin" {
+                        format!("{line} min {} max {}", $min, $max)
+                    } else {
+                        line
+                    };
+                )?
+                $print(&line);
             }
         )*
     };
@@ -180,9 +182,9 @@ macro_rules! __params_print_options {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __params_print_buttons {
-    ($( $key:literal, )*) => {
+    ($print:ident; $( $key:literal, )*) => {
         $(
-            println!("option name {} type button", $key);
+            $print(&format!("option name {} type button", $key));
         )*
     };
 }
@@ -190,17 +192,17 @@ macro_rules! __params_print_buttons {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __params_print_tunable_options {
-    ($self_:ident;
+    ($self_:ident, $print:ident;
      $( $field:ident : $ty:ty => $default:expr, $min:expr, $max:expr, $c:expr, $r:expr; )*) => {
         $(
-            println!(
+            $print(&format!(
                 "option name {} type {} default {} min {} max {}",
                 stringify!($field),
                 <$ty as $crate::UciOptionType>::UCI_TYPE,
                 $self_.$field,
                 $min,
                 $max
-            );
+            ));
         )*
     };
 }
@@ -208,10 +210,10 @@ macro_rules! __params_print_tunable_options {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __params_print_tunables {
-    (@live $self_:ident;
+    (@live $self_:ident, $print:ident;
      $( $field:ident : $ty:ty => $default:expr, $min:expr, $max:expr, $c:expr, $r:expr; )*) => {
         $(
-            println!(
+            $print(&format!(
                 "{}, {}, {}, {}, {}, {}, {}",
                 stringify!($field),
                 <$ty as $crate::UciOptionType>::TUNE_KIND,
@@ -220,13 +222,13 @@ macro_rules! __params_print_tunables {
                 $max,
                 $c,
                 $r
-            );
+            ));
         )*
     };
-    (@default
+    (@default $print:ident;
      $( $field:ident : $ty:ty => $default:expr, $min:expr, $max:expr, $c:expr, $r:expr; )*) => {
         $(
-            println!(
+            $print(&format!(
                 "{}, {}, {}, {}, {}, {}, {}",
                 stringify!($field),
                 <$ty as $crate::UciOptionType>::TUNE_KIND,
@@ -235,7 +237,7 @@ macro_rules! __params_print_tunables {
                 $max,
                 $c,
                 $r
-            );
+            ));
         )*
     };
 }

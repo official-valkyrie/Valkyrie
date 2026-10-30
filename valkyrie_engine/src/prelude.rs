@@ -38,13 +38,13 @@ pub use crate::engine::Engine;
 
 pub use crate::engine::builder::{
     BackpropagationStrategy, BestMoveStrategy, EngineBuilder, EngineConfig, EngineParams,
-    ExpansionStrategy, ExplorationStrategy, GeneralParams, HasWdl, Payload, SearchStrategy,
-    SimulationStrategy, Strategy, TimeManagerStrategy, Unspecified, WinChance,
+    ExpansionStrategy, ExplorationStrategy, GeneralParams, SearchStrategy, SimulationStrategy,
+    Strategy, TimeManagerStrategy, Unspecified,
 };
 
 pub use crate::engine::{
-    EmptyParams, NoReporter, OptionViolation, Pv, Reporter, SearchLimits, SearchStats,
-    StrategyParams, UciOptionType,
+    EmptyParams, HasWdl, NoReporter, OptionViolation, Payload, Pv, Reporter, SearchContext,
+    SearchLimits, SearchStats, StrategyParams, UciOptionType, WinChance,
 };
 
 pub use crate::engine::tree::{AtomicNodeIndex, EdgeIndex, EdgesStore, NodeIndex, Tree};

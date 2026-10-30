@@ -51,8 +51,8 @@ impl MiscProcessor {
         }
 
         match tokens[0] {
-            "draw" | "d" => engine.position().board().draw_board(),
-            "tunables" => engine.params().print_tunables(),
+            "draw" | "d" => engine.print(&engine.position().board().to_string()),
+            "tunables" => engine.params().print_tunables(&|line| engine.print(line)),
             "perft" => Self::perft::<_, true>(&tokens[1..], engine),
             "perft_no_bulk" => Self::perft::<_, false>(&tokens[1..], engine),
             "bench" => Self::bench(&tokens[1..], engine),
@@ -72,31 +72,33 @@ impl MiscProcessor {
             }
         };
 
-        println!();
+        engine.print("");
+        engine.print(&engine.position().board().to_string());
 
-        engine.position().board().draw_board();
+        engine.print("-----------------------------------------------------------");
+        engine.print("  Running PERFT");
+        engine.print(&format!(
+            "  Depth: {}",
+            depth.unwrap_or(DEFAULT_PERFT_DEPTH)
+        ));
+        engine.print(&format!("  Bulk: {BULK}"));
+        engine.print(&format!("  PEXT: {}", cfg!(target_feature = "bmi2")));
+        engine.print("-----------------------------------------------------------\n");
 
-        println!("-----------------------------------------------------------");
-        println!("  Running PERFT");
-        println!("  Depth: {}", depth.unwrap_or(DEFAULT_PERFT_DEPTH));
-        println!("  Bulk: {BULK}");
-        println!("  PEXT: {}", cfg!(target_feature = "bmi2"));
-        println!("-----------------------------------------------------------\n");
-
-        let (result, duration) = if engine.params().general().chess960() {
-            valkyrie_chess::perft::<BULK, true, true>(engine.position().board(), depth)
-        } else {
-            valkyrie_chess::perft::<BULK, true, false>(engine.position().board(), depth)
-        };
+        let chess960 = engine.params().general().chess960();
+        let (result, duration) =
+            valkyrie_chess::perft::<BULK>(engine.position().board(), depth, |mv, nodes| {
+                engine.print(&format!("  {} - {nodes}", mv.to_string(chess960)))
+            });
 
         let miliseconds = duration.as_millis().max(1);
 
-        println!("\n-----------------------------------------------------------");
-        println!(
+        engine.print("\n-----------------------------------------------------------");
+        engine.print(&format!(
             "  Perft ended! {result} nodes, {miliseconds}ms, {} nps",
             result as u128 * 1000 / miliseconds
-        );
-        println!("-----------------------------------------------------------\n");
+        ));
+        engine.print("-----------------------------------------------------------\n");
     }
 
     fn bench<C: EngineConfig>(_args: &[&str], _engine: &Engine<C>) {}

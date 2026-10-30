@@ -159,14 +159,14 @@ macro_rules! define_engine_config {
                 Err($crate::OptionViolation::Unknown(name.to_string()))
             }
 
-            pub fn print_options(&self) {
-                $crate::StrategyParams::print_options(&self.general);
-                $( $crate::StrategyParams::print_options(&self.$s_method); )+
+            pub fn print_options(&self, print: &dyn Fn(&str)) {
+                $crate::StrategyParams::print_options(&self.general, print);
+                $( $crate::StrategyParams::print_options(&self.$s_method, print); )+
             }
 
-            pub fn print_tunables(&self) {
-                $crate::StrategyParams::print_tunables(&self.general);
-                $( $crate::StrategyParams::print_tunables(&self.$s_method); )+
+            pub fn print_tunables(&self, print: &dyn Fn(&str)) {
+                $crate::StrategyParams::print_tunables(&self.general, print);
+                $( $crate::StrategyParams::print_tunables(&self.$s_method, print); )+
             }
         }
 

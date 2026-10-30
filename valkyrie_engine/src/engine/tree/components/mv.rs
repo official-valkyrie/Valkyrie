@@ -43,13 +43,6 @@ use super::{Clear, HasComponent};
 #[derive(Debug, Default)]
 pub struct MoveStore(AtomicU16);
 
-impl Clone for MoveStore {
-    #[inline]
-    fn clone(&self) -> Self {
-        Self(AtomicU16::new(self.0.load(Ordering::Relaxed)))
-    }
-}
-
 impl Clear for MoveStore {
     #[inline]
     fn clear(&self) {

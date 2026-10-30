@@ -284,11 +284,7 @@ impl ChessBoard {
                 to_square,
                 mask,
             ),
-            _ => {
-                self.draw_board();
-                println!("{}", mv.to_string(true));
-                unreachable!()
-            }
+            _ => unreachable!("{self}\n{}", mv.to_string(true)),
         }
     }
 

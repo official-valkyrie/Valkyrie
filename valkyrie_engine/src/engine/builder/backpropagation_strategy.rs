@@ -36,7 +36,8 @@
 
 use crate::prelude::*;
 
-crate::register_strategy!(basic_scalar_backprop);
+pub mod basic_scalar_backprop;
+pub use self::basic_scalar_backprop::*;
 
 pub trait BackpropagationStrategy<C: EngineConfig>: Strategy {
     fn execute(

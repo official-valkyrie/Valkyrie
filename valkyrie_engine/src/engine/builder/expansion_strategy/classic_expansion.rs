@@ -35,7 +35,11 @@
 */
 
 use crate::{
-    engine::{policy_entry::PolicyEntry, tree::components::{HasMove, HasPolicy}}, prelude::*,
+    engine::{
+        policy_entry::PolicyEntry,
+        tree::components::{HasMove, HasPolicy},
+    },
+    prelude::*,
 };
 
 #[derive(Debug)]
@@ -49,7 +53,12 @@ impl<C: EngineConfig> ExpansionStrategy<C> for ClassicExpansion
 where
     C::Edge: HasPolicy + HasMove,
 {
-    fn execute(policy_distribution: &mut [PolicyEntry], node: &C::Node, _params: &Self::Params, _engine: &Engine<C>) {
+    fn execute(
+        policy_distribution: &mut [PolicyEntry],
+        node: &C::Node,
+        _params: &Self::Params,
+        _engine: &Engine<C>,
+    ) {
         let mut edges = node.edges_mut();
 
         if edges.len() > 0 {
@@ -57,7 +66,7 @@ where
         }
 
         let mut max = f32::NEG_INFINITY;
-        for entry in policy_distribution.iter()  {
+        for entry in policy_distribution.iter() {
             max = entry.policy().max(max);
         }
 
@@ -67,7 +76,7 @@ where
             total += entry.policy();
         }
 
-        for entry in policy_distribution.iter()  {
+        for entry in policy_distribution.iter() {
             let edge = C::Edge::default();
             edge.set_mv(entry.mv());
             edge.set_policy(entry.policy() / total);

@@ -34,12 +34,14 @@
     documentation.
 */
 
+use std::fmt::{Display, Formatter, Result};
+
 use crate::{FEN, Piece, Side, Square, board::ChessBoard};
 
 const PIECE_SYMBOLS: [char; 6] = ['p', 'n', 'b', 'r', 'q', 'k'];
 
-impl ChessBoard {
-    pub fn draw_board(&self) {
+impl Display for ChessBoard {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
         let mut result = String::new();
 
         for rank in (0..8).rev() {
@@ -64,7 +66,10 @@ impl ChessBoard {
             result.push('\n');
         }
 
-        println!("{result}  a b c d e f g h");
-        println!("FEN: {}", FEN::from(self));
+        write!(
+            formatter,
+            "{result}  a b c d e f g h\nFEN: {}",
+            FEN::from(self)
+        )
     }
 }

@@ -221,10 +221,6 @@ impl Bitboard {
     pub const fn wrapping_sub(self, rhs: Bitboard) -> Self {
         Self(self.0.wrapping_sub(rhs.0))
     }
-
-    pub fn draw_bitboard(&self) {
-        println!("{}", String::from(*self));
-    }
 }
 
 impl From<u64> for Bitboard {

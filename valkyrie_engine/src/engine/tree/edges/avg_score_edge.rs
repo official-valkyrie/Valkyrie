@@ -35,7 +35,7 @@
 */
 
 use crate::engine::{
-    builder::WinChance,
+    WinChance,
     tree::components::{
         ChildStore, HasQ, HasScore, HasScoreSum, HasVisits, MoveStore, PolicyStore, ScoreSumStore,
         VisitsStore,

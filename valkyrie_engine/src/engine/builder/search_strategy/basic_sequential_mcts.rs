@@ -34,20 +34,13 @@
     documentation.
 */
 
-use valkyrie_chess::{
-    ChessPosition,
-    GameState,
-};
+use valkyrie_chess::{ChessPosition, GameState};
 
 use crate::{
     engine::{
         builder::SimulationStrategy,
         policy_entry::PolicyEntry,
-        tree::components::{
-            HasGameState,
-            HasMove,
-            HasVisits,
-        },
+        tree::components::{HasGameState, HasMove, HasVisits},
     },
     prelude::*,
 };
@@ -55,12 +48,8 @@ use crate::{
 #[derive(Debug)]
 pub struct BasicSequentialMCTS;
 
-crate::define_strategy_params! {
-    ClassicalSearchParams { }
-}
-
 impl Strategy for BasicSequentialMCTS {
-    type Params = ClassicalSearchParams;
+    type Params = EmptyParams;
 }
 
 impl<C: EngineConfig> SearchStrategy<C> for BasicSequentialMCTS
@@ -70,23 +59,15 @@ where
     C::Expansion: ExpansionStrategy<C>,
     C::Simulation: SimulationStrategy<C>,
     C::Backpropagation: BackpropagationStrategy<C>,
-    C::BestMove: BestMoveStrategy<C>,
     C::Node: HasVisits,
 {
-    fn execute(limits: &SearchLimits, params: &Self::Params, engine: &Engine<C>) -> (Move, SearchStats) {
-        let search_stats = SearchStats::new();
-
-        Searcher::new(limits, params, &search_stats, engine).run();
-
-        (engine.best_move(), search_stats)
+    fn execute(context: &SearchContext<C>, _params: &Self::Params, engine: &Engine<C>) {
+        Searcher::new(context, engine).run();
     }
 }
 
 struct Searcher<'a, C: EngineConfig> {
-    limits: &'a SearchLimits,
-    #[allow(dead_code)]
-    params: &'a ClassicalSearchParams,
-    stats: &'a SearchStats,
+    context: &'a SearchContext<'a, C>,
     engine: &'a Engine<C>,
     depth: u64,
 }
@@ -100,16 +81,9 @@ where
     C::Backpropagation: BackpropagationStrategy<C>,
     C::Node: HasVisits,
 {
-    fn new(
-        limits: &'a SearchLimits,
-        params: &'a ClassicalSearchParams,
-        stats: &'a SearchStats,
-        engine: &'a Engine<C>,
-    ) -> Self {
+    fn new(context: &'a SearchContext<'a, C>, engine: &'a Engine<C>) -> Self {
         Self {
-            limits,
-            params,
-            stats,
+            context,
             engine,
             depth: 0,
         }
@@ -134,23 +108,24 @@ where
 
     fn main_thread_search(&mut self) {
         let engine = self.engine;
-        let time_manager = C::TimeManager::new(self.limits, engine.params().time_manager(), engine);
-        let mut main_thread_iters = 0u64;
+        let stats = self.context.stats();
 
         loop {
             let position = engine.position().clone();
             self.depth = 0;
 
-            if self.search_step::<true>(engine.tree().root_index(), position).is_none() {
+            if self
+                .search_step::<true>(engine.tree().root_index(), position)
+                .is_none()
+            {
                 break;
             }
 
-            self.stats.add_iteration(self.depth);
-            main_thread_iters += 1;
+            stats.add_iteration(self.depth);
 
-            engine.reporter().search_update(self.stats, engine);
+            engine.reporter().search_update(stats, engine);
 
-            if engine.should_stop(main_thread_iters, self.limits, self.stats, &time_manager) {
+            if engine.should_stop(self.context) {
                 break;
             }
         }
@@ -164,8 +139,11 @@ where
         let engine = self.engine;
         let current_node = &engine.tree()[current_node_idx];
 
-        let (payload, edge_idx) = if !ROOT &&
-            (current_node.visits() == 0 || current_node.edge_count() == 0 || current_node.is_terminal()) {
+        let (payload, edge_idx) = if !ROOT
+            && (current_node.visits() == 0
+                || current_node.edge_count() == 0
+                || current_node.is_terminal())
+        {
             if current_node.visits() == 0 {
                 current_node.set_game_state(position.game_state(engine.position()));
             }
@@ -178,9 +156,12 @@ where
 
             (payload, None)
         } else {
-            let edge_idx = C::Exploration::execute(current_node, engine.params().exploration(), engine);
+            let edge_idx =
+                C::Exploration::execute(current_node, engine.params().exploration(), engine);
 
-            let child_idx = engine.tree().get_or_create_child(current_node_idx, edge_idx)?;
+            let child_idx = engine
+                .tree()
+                .get_or_create_child(current_node_idx, edge_idx)?;
             let mv = current_node.edges()[edge_idx].mv();
 
             let mut position_clone = position.clone();
@@ -195,7 +176,13 @@ where
             (payload, Some(edge_idx))
         };
 
-        let backed_up = C::Backpropagation::execute(payload, current_node, edge_idx, engine.params().backpropagation(), engine);
+        let backed_up = C::Backpropagation::execute(
+            payload,
+            current_node,
+            edge_idx,
+            engine.params().backpropagation(),
+            engine,
+        );
 
         Some(backed_up.flipped())
     }
@@ -206,7 +193,12 @@ where
             policy_distribution.push(PolicyEntry::new(mv, 1.0));
         });
 
-        C::Expansion::execute(&mut policy_distribution, node, self.engine.params().expansion(), self.engine);
+        C::Expansion::execute(
+            &mut policy_distribution,
+            node,
+            self.engine.params().expansion(),
+            self.engine,
+        );
     }
 
     fn simulate_node(
@@ -219,7 +211,12 @@ where
             GameState::Won(_) => Payload::WIN,
             GameState::Lost(_) => Payload::LOSS,
             GameState::Drew => Payload::DRAW,
-            GameState::Ongoing => C::Simulation::execute(raw_evals, position, self.engine.params().simulation(), self.engine),
+            GameState::Ongoing => C::Simulation::execute(
+                raw_evals,
+                position,
+                self.engine.params().simulation(),
+                self.engine,
+            ),
         }
     }
 }

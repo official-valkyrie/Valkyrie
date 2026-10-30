@@ -37,7 +37,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use valkyrie_engine::{
-    engine::tree::components::{HasGameState, HasScore, HasVisits},
+    engine::tree::components::{HasScore, HasVisits},
     prelude::*,
 };
 
@@ -59,32 +59,30 @@ impl UciReporter {
         C::Edge: HasScore + HasVisits,
     {
         let time = stats.elapsed_ms();
-        let pv = engine.pv(0);
-        let state = pv
-            .as_ref()
-            .map_or_else(|| engine.tree().root_node().game_state(), Pv::state);
-        let score = match state.mate_in() {
-            Some(moves) => format!("mate {moves}"),
-            None => format!("cp {}", pv.as_ref().map_or(0, |pv| pv.score().cp())),
-        };
-
         let depth = stats.avg_depth();
         let max_depth = stats.max_depth();
         let nodes = engine.reported_nodes(stats);
         let nps = nodes as u128 * 1000 / time.max(1) as u128;
-        let hashfull = 0;
-        let pv_idx = 1;
+        let hashfull = engine.tree().len() * 1000 / engine.tree().capacity().max(1);
         let chess960 = engine.params().general().chess960();
-        let pv_str: Vec<String> = pv
-            .iter()
-            .flat_map(Pv::moves)
-            .map(|mv| mv.to_string(chess960))
-            .collect();
 
-        println!(
-            "info depth {depth} seldepth {max_depth} score {score} time {time} nodes {nodes} nps {nps} hashfull {hashfull} multipv {pv_idx} pv {}",
-            pv_str.join(" ")
-        )
+        let pvs = (0..)
+            .map_while(|pv_idx| engine.pv(pv_idx))
+            .take(engine.params().general().multi_pv());
+
+        for (pv_idx, pv) in pvs.enumerate() {
+            let score = match pv.state().mate_in() {
+                Some(moves) => format!("mate {moves}"),
+                None => format!("cp {}", pv.score().cp()),
+            };
+            let moves: Vec<String> = pv.moves().iter().map(|mv| mv.to_string(chess960)).collect();
+
+            println!(
+                "info depth {depth} seldepth {max_depth} score {score} time {time} nodes {nodes} nps {nps} hashfull {hashfull} multipv {} pv {}",
+                pv_idx + 1,
+                moves.join(" ")
+            )
+        }
     }
 
     pub fn print_best_move<C: EngineConfig>(mv: Move, engine: &Engine<C>) {

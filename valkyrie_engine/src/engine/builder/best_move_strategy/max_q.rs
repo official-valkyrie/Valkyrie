@@ -35,10 +35,7 @@
 */
 
 use crate::{
-    engine::tree::components::{
-        HasQ,
-        HasVisits,
-    },
+    engine::tree::components::{HasQ, HasVisits},
     prelude::*,
 };
 
@@ -53,18 +50,26 @@ impl<C: EngineConfig> BestMoveStrategy<C> for MaxQ
 where
     C::Edge: HasQ + HasVisits,
 {
-    fn execute(node: &C::Node, line_idx: usize, _params: &Self::Params, _engine: &Engine<C>) -> Option<EdgeIndex> {
+    fn execute(
+        node: &C::Node,
+        line_idx: usize,
+        _params: &Self::Params,
+        _engine: &Engine<C>,
+    ) -> Option<EdgeIndex> {
         let edges = node.edges();
 
-        let mut ranking: Vec<usize> = (0..edges.len()).collect();
+        let mut ranking: Vec<usize> = (0..edges.len())
+            .filter(|&edge_idx| edges[edge_idx].visits() > 0)
+            .collect();
         ranking.sort_unstable_by(|&lhs, &rhs| {
             let (lhs, rhs) = (&edges[lhs], &edges[rhs]);
-            (rhs.visits() > 0)
-                .cmp(&(lhs.visits() > 0))
-                .then(rhs.q().total_cmp(&lhs.q()))
+            rhs.q()
+                .total_cmp(&lhs.q())
                 .then(rhs.visits().cmp(&lhs.visits()))
         });
 
-        ranking.get(line_idx).map(|&edge_idx| EdgeIndex::new(edge_idx))
+        ranking
+            .get(line_idx)
+            .map(|&edge_idx| EdgeIndex::new(edge_idx))
     }
 }

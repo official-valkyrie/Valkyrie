@@ -190,41 +190,41 @@ macro_rules! define_strategy_params {
                 Err($crate::OptionViolation::Unknown(_name.to_string()))
             }
 
-            fn print_options(&self) {
-                $( $crate::__params_print_options!(self;
+            fn print_options(&self, _print: &dyn Fn(&str)) {
+                $( $crate::__params_print_options!(self, _print;
                     $( [$option_key] $option : $option_ty => $option_default $(, $option_min, $option_max)?; )*
                 ); )?
 
-                $( $crate::__params_print_buttons!($( $button_key, )*); )?
+                $( $crate::__params_print_buttons!(_print; $( $button_key, )*); )?
 
                 #[cfg(not(feature = "release"))]
                 {
-                    $( $crate::__params_print_tunable_options!(self;
+                    $( $crate::__params_print_tunable_options!(self, _print;
                         $( $tunable : $tunable_ty => $tunable_default, $tunable_min, $tunable_max, $tunable_c, $tunable_r; )*
                     ); )?
                 }
 
                 $(
-                    $( $crate::StrategyParams::print_options(&self.$inner_field); )*
+                    $( $crate::StrategyParams::print_options(&self.$inner_field, _print); )*
                 )?
             }
 
-            fn print_tunables(&self) {
+            fn print_tunables(&self, _print: &dyn Fn(&str)) {
                 #[cfg(not(feature = "release"))]
                 {
-                    $( $crate::__params_print_tunables!(@live self;
+                    $( $crate::__params_print_tunables!(@live self, _print;
                         $( $tunable : $tunable_ty => $tunable_default, $tunable_min, $tunable_max, $tunable_c, $tunable_r; )*
                     ); )?
                 }
                 #[cfg(feature = "release")]
                 {
-                    $( $crate::__params_print_tunables!(@default
+                    $( $crate::__params_print_tunables!(@default _print;
                         $( $tunable : $tunable_ty => $tunable_default, $tunable_min, $tunable_max, $tunable_c, $tunable_r; )*
                     ); )?
                 }
 
                 $(
-                    $( $crate::StrategyParams::print_tunables(&self.$inner_field); )*
+                    $( $crate::StrategyParams::print_tunables(&self.$inner_field, _print); )*
                 )?
             }
         }

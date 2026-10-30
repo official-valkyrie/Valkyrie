@@ -56,7 +56,7 @@ fn standard() {
         let expected_result = target[1].parse::<u64>().unwrap();
         let depth = target[0].chars().collect::<Vec<char>>()[1] as u8 - b'0';
         println!("{fen}");
-        let (result, _) = perft::<true, false, false>(&ChessBoard::from(&fen), Some(depth));
+        let (result, _) = perft::<true>(&ChessBoard::from(&fen), Some(depth), |_, _| {});
         assert_eq!(result, expected_result);
     }
 }
@@ -76,7 +76,7 @@ fn frc() {
         let expected_result = target[1].parse::<u64>().unwrap();
         let depth = target[0].chars().collect::<Vec<char>>()[1] as u8 - b'0';
         println!("{fen}");
-        let (result, _) = perft::<true, false, true>(&ChessBoard::from(&fen), Some(depth));
+        let (result, _) = perft::<true>(&ChessBoard::from(&fen), Some(depth), |_, _| {});
         assert_eq!(result, expected_result);
     }
 }

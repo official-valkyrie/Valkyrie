@@ -46,13 +46,6 @@ const PAYLOAD_MASK: u16 = 0x3FFF;
 #[derive(Debug, Default)]
 pub struct GameStateStore(AtomicU16);
 
-impl Clone for GameStateStore {
-    #[inline]
-    fn clone(&self) -> Self {
-        Self(AtomicU16::new(self.0.load(Ordering::Relaxed)))
-    }
-}
-
 impl Clear for GameStateStore {
     #[inline]
     fn clear(&self) {

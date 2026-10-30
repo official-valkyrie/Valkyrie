@@ -35,10 +35,7 @@
 */
 
 use crate::{
-    engine::tree::components::{
-        HasScoreSum,
-        HasVisits,
-    },
+    engine::tree::components::{HasScoreSum, HasVisits},
     prelude::*,
 };
 
@@ -53,7 +50,7 @@ impl<C: EngineConfig> BackpropagationStrategy<C> for BasicScalarBackpropagate
 where
     C::Simulation: SimulationStrategy<C>,
     C::Edge: HasScoreSum + HasVisits,
-    C::Node: HasVisits
+    C::Node: HasVisits,
 {
     fn execute(
         payload: <C::Simulation as SimulationStrategy<C>>::Output,

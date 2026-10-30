@@ -38,27 +38,37 @@
 fn main() {
     use std::process::Command;
 
-    let git_commit_hash = Command::new("git")
-        .args(["rev-parse", "--short=8", "HEAD"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_owned())
-        .unwrap_or_else(|| "nogit000".to_owned());
+    let git = |args: &[&str]| {
+        Command::new("git")
+            .args(args)
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .and_then(|output| String::from_utf8(output.stdout).ok())
+            .map(|text| text.trim().to_owned())
+    };
 
-    let current_date = chrono::Utc::now().format("%Y%m%d").to_string();
+    let commit = git(&[
+        "log",
+        "-1",
+        "--format=%cd-%h",
+        "--date=format:%Y%m%d",
+        "--abbrev=8",
+    ])
+    .unwrap_or_else(|| "nogit".to_owned());
 
-    let formatted_name = format!("Valkyrie-dev-{current_date}-{git_commit_hash}");
-
-    println!("cargo:rustc-env=ENGINE_NAME={formatted_name}");
+    println!("cargo:rustc-env=ENGINE_NAME=Valkyrie-dev-{commit}");
 
     println!("cargo:rerun-if-changed=build.rs");
+
+    if let Some(head_log) = git(&["rev-parse", "--git-path", "logs/HEAD"]) {
+        println!("cargo:rerun-if-changed={head_log}");
+    }
 }
 
 #[cfg(feature = "release")]
 fn main() {
-    let formatted_name = format!("Valkyrie v{}", env!("ENGINE_VERSION"));
+    let formatted_name = format!("Valkyrie v{}", env!("CARGO_PKG_VERSION"));
 
     println!("cargo:rustc-env=ENGINE_NAME={formatted_name}");
 

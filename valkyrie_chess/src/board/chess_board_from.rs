@@ -61,7 +61,7 @@ impl From<&FEN> for ChessBoard {
                     'r' => board.set_piece_on_square(square, Piece::ROOK, side),
                     'q' => board.set_piece_on_square(square, Piece::QUEEN, side),
                     'k' => board.set_piece_on_square(square, Piece::KING, side),
-                    _ => println!("Incorrect character in fen string!"),
+                    _ => unreachable!(),
                 }
 
                 index += 1;
@@ -70,14 +70,6 @@ impl From<&FEN> for ChessBoard {
         }
 
         board.side = Side::from(value.side_to_move == "b");
-
-        if board.is_square_attacked(
-            board.king_square(board.side.flipped()),
-            board.side.flipped(),
-        ) {
-            println!("Tried to parse illegal position. Defaulting to starting position instead.");
-            return Self::default();
-        }
 
         let kings = [
             board.king_square(Side::WHITE),

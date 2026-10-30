@@ -35,11 +35,7 @@
 */
 
 use crate::{
-    engine::tree::components::{
-        HasPolicy,
-        HasQ,
-        HasVisits,
-    },
+    engine::tree::components::{HasPolicy, HasQ, HasVisits},
     prelude::*,
 };
 
@@ -66,7 +62,7 @@ where
     fn execute(node: &C::Node, params: &Self::Params, _engine: &Engine<C>) -> EdgeIndex {
         assert!(node.edge_count() > 0);
 
-        let cpuct = cpuct::<C>(node, params);
+        let cpuct = params.cpuct();
         let parent_visits = node.visits();
 
         let mut edge_idx = usize::MAX;
@@ -94,14 +90,6 @@ where
 
         EdgeIndex::new(edge_idx)
     }
-}
-
-fn cpuct<C: EngineConfig>(_parent_node: &<C as EngineConfig>::Node, params: &PuctParams) -> f32
-where
-    C::Node: HasVisits,
-    C::Edge: HasVisits + HasPolicy + HasQ, 
-{
-    params.cpuct()
 }
 
 fn exploration_score(parent_visits: u64, child_visits: u64) -> f32 {

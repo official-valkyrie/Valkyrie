@@ -54,6 +54,8 @@ impl UciProcessor {
     ) -> bool
     where
         C::Search: SearchStrategy<C>,
+        C::TimeManager: TimeManagerStrategy<C>,
+        C::BestMove: BestMoveStrategy<C>,
     {
         let tokens: Vec<&str> = cmd.split_whitespace().collect();
 
@@ -77,7 +79,7 @@ impl UciProcessor {
     fn uci<C: EngineConfig>(engine: &mut Engine<C>) {
         println!("id name {}", env!("ENGINE_NAME"));
         println!("id author {}", env!("CARGO_PKG_AUTHORS"));
-        engine.params().print_options();
+        engine.params().print_options(&|line| println!("{line}"));
         println!("uciok");
     }
 
@@ -136,6 +138,8 @@ impl UciProcessor {
         shutdown_token: &AtomicBool,
     ) where
         C::Search: SearchStrategy<C>,
+        C::TimeManager: TimeManagerStrategy<C>,
+        C::BestMove: BestMoveStrategy<C>,
     {
         let limits = match parse_go(args, engine.position().board().side()) {
             Ok(limits) => limits,

@@ -41,13 +41,6 @@ use super::{Clear, HasComponent};
 #[derive(Debug, Default)]
 pub struct ScoreSumStore(AtomicU64);
 
-impl Clone for ScoreSumStore {
-    #[inline]
-    fn clone(&self) -> Self {
-        Self(AtomicU64::new(self.0.load(Ordering::Relaxed)))
-    }
-}
-
 impl Clear for ScoreSumStore {
     #[inline]
     fn clear(&self) {

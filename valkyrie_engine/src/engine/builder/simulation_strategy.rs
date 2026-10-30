@@ -38,7 +38,8 @@ use valkyrie_chess::ChessPosition;
 
 use crate::prelude::*;
 
-crate::register_strategy!(material_evaluation);
+pub mod material_evaluation;
+pub use self::material_evaluation::*;
 
 pub trait SimulationStrategy<C: EngineConfig>: Strategy {
     type Output: Payload;

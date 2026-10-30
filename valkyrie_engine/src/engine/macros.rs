@@ -37,5 +37,4 @@
 mod compose;
 mod engine_config;
 mod params_common;
-mod register;
 mod strategy_params;

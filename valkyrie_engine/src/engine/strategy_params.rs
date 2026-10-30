@@ -116,6 +116,11 @@ impl UciOptionType for u64 {
     const TUNE_KIND: &'static str = "int";
 }
 
+impl UciOptionType for usize {
+    const UCI_TYPE: &'static str = "spin";
+    const TUNE_KIND: &'static str = "int";
+}
+
 impl UciOptionType for f32 {
     const UCI_TYPE: &'static str = "string";
     const TUNE_KIND: &'static str = "float";
@@ -139,8 +144,8 @@ pub trait StrategyParams: std::fmt::Debug + Clone + Send + Sync {
 
     fn new() -> Self;
     fn set_option(&mut self, name: &str, value: &str) -> Result<(), OptionViolation>;
-    fn print_options(&self);
-    fn print_tunables(&self);
+    fn print_options(&self, print: &dyn Fn(&str));
+    fn print_tunables(&self, print: &dyn Fn(&str));
 }
 
 const DUPLICATE_MESSAGE: &str = "Duplicate option name: ";
@@ -242,7 +247,7 @@ impl StrategyParams for EmptyParams {
         Err(OptionViolation::Unknown(name.to_string()))
     }
 
-    fn print_options(&self) {}
+    fn print_options(&self, _print: &dyn Fn(&str)) {}
 
-    fn print_tunables(&self) {}
+    fn print_tunables(&self, _print: &dyn Fn(&str)) {}
 }

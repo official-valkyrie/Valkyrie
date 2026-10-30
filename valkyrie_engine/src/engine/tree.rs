@@ -70,7 +70,7 @@ impl<N: NodeType> Tree<N> {
         let size = bytes / node_size;
 
         let tree = Self {
-            nodes: vec![N::default(); size],
+            nodes: std::iter::repeat_with(N::default).take(size).collect(),
             root_idx: AtomicNodeIndex::new(NodeIndex::NULL),
             size_in_mb,
             current_len: AtomicUsize::new(0),

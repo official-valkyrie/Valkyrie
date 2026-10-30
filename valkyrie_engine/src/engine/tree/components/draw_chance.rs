@@ -41,13 +41,6 @@ use super::{Clear, HasComponent};
 #[derive(Debug, Default)]
 pub struct DrawStore(AtomicU32);
 
-impl Clone for DrawStore {
-    #[inline]
-    fn clone(&self) -> Self {
-        Self(AtomicU32::new(self.0.load(Ordering::Relaxed)))
-    }
-}
-
 impl Clear for DrawStore {
     #[inline]
     fn clear(&self) {

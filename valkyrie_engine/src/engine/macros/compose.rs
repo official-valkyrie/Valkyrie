@@ -41,7 +41,7 @@ macro_rules! compose_edge {
             $( $field:ident : $store:ty ),* $(,)?
         }
     ) => {
-        #[derive(Clone, Debug, Default)]
+        #[derive(Debug, Default)]
         $vis struct $name {
             $( $field: $store, )*
         }
@@ -64,7 +64,7 @@ macro_rules! compose_node {
             $( $field:ident : $store:ty ),* $(,)?
         }
     ) => {
-        #[derive(Clone, Debug, Default)]
+        #[derive(Debug, Default)]
         $vis struct $name<E: $crate::engine::tree::components::EdgeType = $crate::engine::tree::edges::AvgScoreEdge> {
             $( $field: $store, )*
             edges: $crate::engine::tree::edge_storage::EdgesStore<E>,

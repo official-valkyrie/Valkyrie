@@ -36,7 +36,8 @@
 
 use crate::prelude::*;
 
-crate::register_strategy!(puct);
+pub mod puct;
+pub use self::puct::*;
 
 pub trait ExplorationStrategy<C: EngineConfig>: Strategy {
     fn execute(node: &C::Node, params: &Self::Params, engine: &Engine<C>) -> EdgeIndex;

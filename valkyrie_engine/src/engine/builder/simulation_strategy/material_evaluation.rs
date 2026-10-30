@@ -34,15 +34,9 @@
     documentation.
 */
 
-use valkyrie_chess::{
-    ChessPosition,
-    Piece,
-};
+use valkyrie_chess::{ChessPosition, Piece};
 
-use crate::{
-    engine::builder::SimulationStrategy,
-    prelude::*,
-};
+use crate::{engine::builder::SimulationStrategy, prelude::*};
 
 const PIECE_VALUES: [i32; 5] = [100, 300, 330, 500, 900];
 
@@ -56,7 +50,12 @@ impl Strategy for MaterialEvaluation {
 impl<C: EngineConfig> SimulationStrategy<C> for MaterialEvaluation {
     type Output = WinChance;
 
-    fn execute(_raw_eval: &[f32], position: &ChessPosition, _params: &Self::Params, _engine: &Engine<C>) -> Self::Output {
+    fn execute(
+        _raw_eval: &[f32],
+        position: &ChessPosition,
+        _params: &Self::Params,
+        _engine: &Engine<C>,
+    ) -> Self::Output {
         let board = position.board();
         let side = board.side();
 
