@@ -96,8 +96,8 @@ where
         if root_node.edge_count() == 0 {
             root_node.set_game_state(engine.position().game_state(engine.position()));
 
-            if !root_node.is_terminal() {
-                self.expand_node(root_node, engine.position());
+            if !root_node.is_terminal() && self.expand_node(root_node, engine.position()).is_err() {
+                return;
             }
         }
 
@@ -114,10 +114,7 @@ where
             let mut position = *engine.position();
             self.depth = 0;
 
-            if self
-                .search_step::<true>(engine.tree().root_index(), &mut position)
-                .is_none()
-            {
+            if self.search_step(None, &mut position).is_none() {
                 break;
             }
 
@@ -131,27 +128,34 @@ where
         }
     }
 
-    fn search_step<const ROOT: bool>(
+    fn search_step(
         &mut self,
-        current_node_idx: NodeIndex,
+        edge: Option<EdgeIndex>,
         position: &mut ChessPosition,
     ) -> Option<<C::Simulation as SimulationStrategy<C>>::Output> {
         let engine = self.engine;
-        let current_node = &engine.tree()[current_node_idx];
+        let tree = engine.tree();
 
-        let (payload, edge_idx) = if !ROOT
-            && (current_node.visits() == 0
-                || current_node.edge_count() == 0
-                || current_node.is_terminal())
+        let child = match edge {
+            Some(edge) => tree
+                .get_or_create_child(edge, NodeKey::from(&*position))
+                .ok()?,
+            None => Child::Found(tree.root_index()),
+        };
+        let created = child.is_created();
+        let current_node = &tree[child.index()];
+
+        let (payload, edge_idx) = if edge.is_some()
+            && (created || current_node.edge_count() == 0 || current_node.is_terminal())
         {
-            if current_node.visits() == 0 {
+            if created {
                 current_node.set_game_state(position.game_state(engine.position()));
             }
 
             let payload = self.simulate_node(&[], current_node, position);
 
-            if current_node.visits() == 0 && !current_node.is_terminal() {
-                self.expand_node(current_node, position);
+            if created && !current_node.is_terminal() {
+                self.expand_node(current_node, position).ok()?;
             }
 
             (payload, None)
@@ -159,16 +163,10 @@ where
             let edge_idx =
                 C::Exploration::execute(current_node, engine.params().exploration(), engine);
 
-            let child_idx = engine
-                .tree()
-                .get_or_create_child(current_node_idx, edge_idx)?;
-            let mv = current_node.edges()[edge_idx].mv();
-
-            position.make_move(mv);
-
+            position.make_move(tree[edge_idx].mv());
             self.depth = self.depth.saturating_add(1);
 
-            let payload = self.search_step::<false>(child_idx, position)?;
+            let payload = self.search_step(Some(edge_idx), position)?;
 
             (payload, Some(edge_idx))
         };
@@ -184,7 +182,7 @@ where
         Some(backed_up.flipped())
     }
 
-    fn expand_node(&self, node: &C::Node, position: &ChessPosition) {
+    fn expand_node(&self, node: &C::Node, position: &ChessPosition) -> Result<(), TreeFull> {
         let mut policy_distribution = Vec::with_capacity(35);
         position.board().map_legal_moves(|mv| {
             policy_distribution.push(PolicyEntry::new(mv, 1.0));
@@ -195,7 +193,7 @@ where
             node,
             self.engine.params().expansion(),
             self.engine,
-        );
+        )
     }
 
     fn simulate_node(

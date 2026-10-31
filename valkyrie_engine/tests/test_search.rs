@@ -58,7 +58,7 @@ macro_rules! engine {
             .backpropagation::<BasicScalarBackpropagate>()
             .search::<BasicSequentialMCTS>()
             .time_manager::<SimpleTimeManager>()
-            .node::<ClassicNode<AvgScoreEdge>>()
+            .tree::<SequentialTree<ClassicNode<AvgScoreEdge>>>()
             .build()
     };
 }

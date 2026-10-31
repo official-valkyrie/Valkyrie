@@ -57,30 +57,26 @@ where
         policy_distribution: &mut [PolicyEntry],
         node: &C::Node,
         _params: &Self::Params,
-        _engine: &Engine<C>,
-    ) {
-        let mut edges = node.edges_mut();
+        engine: &Engine<C>,
+    ) -> Result<(), TreeFull> {
+        engine
+            .tree()
+            .expand(node, policy_distribution.len(), |edges| {
+                let mut max = f32::NEG_INFINITY;
+                for entry in policy_distribution.iter() {
+                    max = entry.policy().max(max);
+                }
 
-        if !edges.is_empty() {
-            return;
-        }
+                let mut total = 0.0;
+                for entry in policy_distribution.iter_mut() {
+                    entry.set_policy((entry.policy() - max).exp());
+                    total += entry.policy();
+                }
 
-        let mut max = f32::NEG_INFINITY;
-        for entry in policy_distribution.iter() {
-            max = entry.policy().max(max);
-        }
-
-        let mut total = 0.0;
-        for entry in policy_distribution.iter_mut() {
-            entry.set_policy((entry.policy() - max).exp());
-            total += entry.policy();
-        }
-
-        edges.extend(policy_distribution.iter().map(|entry| {
-            let edge = C::Edge::default();
-            edge.set_mv(entry.mv());
-            edge.set_policy(entry.policy() / total);
-            edge
-        }));
+                for (edge, entry) in edges.iter().zip(policy_distribution.iter()) {
+                    edge.set_mv(entry.mv());
+                    edge.set_policy(entry.policy() / total);
+                }
+            })
     }
 }

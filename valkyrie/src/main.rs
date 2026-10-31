@@ -73,7 +73,7 @@ fn main() -> ExitCode {
         .backpropagation::<BasicScalarBackpropagate>()
         .search::<BasicSequentialMCTS>()
         .time_manager::<SimpleTimeManager>()
-        .node::<ClassicNode<AvgScoreEdge>>()
+        .tree::<SequentialTree<ClassicNode<AvgScoreEdge>>>()
         .build();
 
     run(engine)

@@ -34,49 +34,24 @@
     documentation.
 */
 
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use super::NodeIndex;
 
-use super::components::{Clear, EdgeType};
-
-#[derive(Debug, Default)]
-pub struct EdgesStore<E: EdgeType>(RwLock<Vec<E>>);
-
-impl<E: EdgeType> Clear for EdgesStore<E> {
-    #[inline]
-    fn clear(&self) {
-        self.write().clear();
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Child {
+    Found(NodeIndex),
+    Created(NodeIndex),
 }
 
-impl<E: EdgeType> EdgesStore<E> {
+impl Child {
     #[inline]
-    pub fn read(&self) -> RwLockReadGuard<'_, Vec<E>> {
-        self.0.read().unwrap()
-    }
-
-    #[inline]
-    pub fn write(&self) -> RwLockWriteGuard<'_, Vec<E>> {
-        self.0.write().unwrap()
-    }
-}
-
-#[macro_export]
-macro_rules! connect_edges {
-    ($name:ident) => {
-        impl<E: $crate::engine::tree::components::EdgeType>
-            $crate::engine::tree::components::NodeType for $name<E>
-        {
-            type Edge = E;
-
-            #[inline]
-            fn edges(&self) -> ::std::sync::RwLockReadGuard<'_, ::std::vec::Vec<E>> {
-                self.edges.read()
-            }
-
-            #[inline]
-            fn edges_mut(&self) -> ::std::sync::RwLockWriteGuard<'_, ::std::vec::Vec<E>> {
-                self.edges.write()
-            }
+    pub fn index(self) -> NodeIndex {
+        match self {
+            Self::Found(index) | Self::Created(index) => index,
         }
-    };
+    }
+
+    #[inline]
+    pub fn is_created(self) -> bool {
+        matches!(self, Self::Created(_))
+    }
 }

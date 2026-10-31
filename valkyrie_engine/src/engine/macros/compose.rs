@@ -67,7 +67,8 @@ macro_rules! compose_node {
         #[derive(Debug, Default)]
         $vis struct $name<E: $crate::engine::tree::components::EdgeType = $crate::engine::tree::edges::AvgScoreEdge> {
             $( $field: $store, )*
-            edges: $crate::engine::tree::edge_storage::EdgesStore<E>,
+            edges: $crate::engine::tree::EdgeRangeStore,
+            _edge: ::std::marker::PhantomData<fn() -> E>,
         }
 
         impl<E: $crate::engine::tree::components::EdgeType>
@@ -91,6 +92,20 @@ macro_rules! compose_node {
             }
         )*
 
-        $crate::connect_edges!($name);
+        impl<E: $crate::engine::tree::components::EdgeType>
+            $crate::engine::tree::components::NodeType for $name<E>
+        {
+            type Edge = E;
+
+            #[inline]
+            fn edge_range(&self) -> $crate::engine::tree::EdgeRange {
+                self.edges.load()
+            }
+
+            #[inline]
+            fn set_edge_range(&self, range: $crate::engine::tree::EdgeRange) {
+                self.edges.store(range)
+            }
+        }
     };
 }

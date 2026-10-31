@@ -45,5 +45,5 @@ pub trait ExpansionStrategy<C: EngineConfig>: Strategy {
         node: &C::Node,
         params: &Self::Params,
         engine: &Engine<C>,
-    );
+    ) -> Result<(), TreeFull>;
 }

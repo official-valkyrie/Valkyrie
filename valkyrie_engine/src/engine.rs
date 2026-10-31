@@ -77,7 +77,7 @@ use crate::engine::{
     search_state::AtomicSearchState,
     tree::{
         Tree,
-        components::{HasChild, HasGameState, HasMove, HasPolicy, HasScore, HasVisits, NodeType},
+        components::{HasChild, HasGameState, HasMove, HasPolicy, HasScore, HasVisits},
     },
 };
 
@@ -90,13 +90,13 @@ pub struct Engine<C: EngineConfig> {
     params: EngineParams<C>,
     position: ChessPosition,
     search_state: AtomicSearchState,
-    tree: Tree<C::Node>,
+    tree: C::Tree,
     view: Box<dyn View>,
 }
 
 impl<C: EngineConfig> Engine<C> {
     pub(crate) fn new(params: EngineParams<C>) -> Self {
-        let tree = Tree::new(params.general().hash() as usize);
+        let tree = C::Tree::new(params.general().hash() as usize);
 
         Self {
             params,
@@ -143,7 +143,7 @@ impl<C: EngineConfig> Engine<C> {
     }
 
     #[inline]
-    pub fn tree(&self) -> &Tree<C::Node> {
+    pub fn tree(&self) -> &C::Tree {
         &self.tree
     }
 
@@ -214,15 +214,20 @@ where
     C::Node: HasVisits,
     C::Edge: HasScore + HasVisits + HasPolicy,
 {
-    pub fn search(&self, limits: &SearchLimits) -> (Option<Move>, SearchStats) {
+    pub fn search(&mut self, limits: &SearchLimits) -> (Option<Move>, SearchStats) {
+        self.tree.clear();
         self.search_state.set(SearchState::Running);
         self.run_search(SearchContext::new(limits, self, Self::report))
     }
 
     pub fn spawn_search(
-        self: &Arc<Self>,
+        self: &mut Arc<Self>,
         limits: SearchLimits,
     ) -> JoinHandle<(Option<Move>, SearchStats)> {
+        Arc::get_mut(self)
+            .expect("a search is already running")
+            .tree
+            .clear();
         self.search_state.set(SearchState::Running);
         let engine = Arc::clone(self);
 
@@ -261,8 +266,6 @@ where
         if self.position.game_state(&self.position) != GameState::Ongoing {
             return Some(first_move);
         }
-
-        self.tree.clear();
 
         self.view.search_started(context.limits());
 
@@ -305,10 +308,6 @@ where
             return true;
         }
 
-        if self.tree().is_full() {
-            return true;
-        }
-
         if limits.is_infinite() {
             return false;
         }
@@ -343,7 +342,7 @@ where
         let root = self.tree().root_node();
 
         C::BestMove::execute(root, 0, self.params().best_move(), self)
-            .map(|edge_idx| root.edges()[edge_idx].mv())
+            .map(|edge_idx| self.tree[edge_idx].mv())
     }
 
     pub fn report(&self, context: &SearchContext<C>) -> SearchReport
@@ -369,7 +368,7 @@ where
             seldepth: stats.max_depth(),
             nodes,
             nps: (u128::from(nodes) * 1000 / u128::from(time_ms.max(1))) as u64,
-            hashfull: self.tree.len() * 1000 / self.tree.capacity().max(1),
+            hashfull: self.tree.used_bytes() * 1000 / self.tree.total_bytes().max(1),
             lines: (0..)
                 .map_while(|pv_idx| self.pv(pv_idx))
                 .take(self.params.general().multi_pv())
@@ -392,8 +391,8 @@ where
         let root = tree.root_node();
         let root_visits = root.visits().max(1) as f32;
 
-        let mut moves: Vec<RootMove> = root
-            .edges()
+        let mut moves: Vec<RootMove> = tree
+            .edges(root)
             .iter()
             .map(|edge| {
                 let visits = edge.visits();
@@ -427,8 +426,7 @@ where
         let root_edge = C::BestMove::execute(root, pv_idx, self.params().best_move(), self)?;
 
         let (score, state, visit_percent) = {
-            let edges = root.edges();
-            let edge = &edges[root_edge];
+            let edge = &tree[root_edge];
             let state = if edge.has_child() {
                 tree[edge.child()].game_state().for_parent()
             } else {
@@ -443,12 +441,10 @@ where
         };
 
         let mut moves = Vec::new();
-        let mut node_idx = tree.root_index();
         let mut next_edge = Some(root_edge);
 
         while let Some(edge_idx) = next_edge {
-            let edges = tree[node_idx].edges();
-            let edge = &edges[edge_idx];
+            let edge = &tree[edge_idx];
 
             moves.push(edge.mv());
 
@@ -456,8 +452,8 @@ where
                 break;
             }
 
-            node_idx = edge.child();
-            next_edge = C::BestMove::execute(&tree[node_idx], 0, self.params().best_move(), self);
+            next_edge =
+                C::BestMove::execute(&tree[edge.child()], 0, self.params().best_move(), self);
         }
 
         Some(Pv::new(moves, score, state, visit_percent))

@@ -34,123 +34,75 @@
     documentation.
 */
 
+pub mod child;
 pub mod components;
-pub mod edge_storage;
+pub mod edge_range;
 pub mod edges;
+pub mod node_key;
 pub mod nodes;
+pub mod trees;
 
+pub(crate) mod arena;
 pub(crate) mod edge_index;
 pub(crate) mod node_index;
 
-use std::{
-    ops::Index,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use std::ops::Index;
 
-use components::{HasChild, NodeType};
+use components::NodeType;
 
+pub use child::Child;
 pub use edge_index::EdgeIndex;
-pub use edge_storage::EdgesStore;
+pub use edge_range::{EdgeRange, EdgeRangeStore};
 pub use node_index::{AtomicNodeIndex, NodeIndex};
+pub use node_key::NodeKey;
+pub use trees::SequentialTree;
 
-const AVERAGE_EDGES_PER_NODE: usize = 30;
+pub type EdgeOf<T> = <<T as Tree>::Node as NodeType>::Edge;
 
-#[derive(Debug)]
-pub struct Tree<N> {
-    nodes: Vec<N>,
-    root_idx: AtomicNodeIndex,
-    size_in_mb: usize,
-    current_len: AtomicUsize,
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TreeFull;
 
-impl<N: NodeType> Tree<N> {
-    pub fn new(size_in_mb: usize) -> Self {
-        let bytes = size_in_mb * 1024 * 1024;
-        let node_size = size_of::<N>() + size_of::<N::Edge>() * AVERAGE_EDGES_PER_NODE;
-        let size = bytes / node_size;
+pub trait Tree:
+    Index<NodeIndex, Output = Self::Node>
+    + Index<EdgeIndex, Output = EdgeOf<Self>>
+    + std::fmt::Debug
+    + Send
+    + Sync
+    + 'static
+{
+    type Node: NodeType;
 
-        let tree = Self {
-            nodes: std::iter::repeat_with(N::default).take(size).collect(),
-            root_idx: AtomicNodeIndex::new(NodeIndex::NULL),
-            size_in_mb,
-            current_len: AtomicUsize::new(0),
-        };
+    fn new(size_in_mb: usize) -> Self;
 
-        tree.clear();
-        tree
+    fn resize(&mut self, size_in_mb: usize)
+    where
+        Self: Sized,
+    {
+        *self = Self::new(size_in_mb);
     }
 
-    pub fn resize(&mut self, size_in_mb: usize) {
-        *self = Self::new(size_in_mb)
-    }
+    fn clear(&mut self);
 
-    pub fn clear(&self) {
-        self.current_len.store(0, Ordering::Relaxed);
-        self.root_idx
-            .store(self.create_node().unwrap_or(NodeIndex::NULL));
-    }
+    fn root_index(&self) -> NodeIndex;
 
-    pub fn root_index(&self) -> NodeIndex {
-        self.root_idx.load()
-    }
-
-    pub fn root_node(&self) -> &N {
+    fn root_node(&self) -> &Self::Node {
         &self[self.root_index()]
     }
 
-    pub fn len(&self) -> usize {
-        self.current_len.load(Ordering::Relaxed)
-    }
+    fn used_bytes(&self) -> usize;
 
-    pub fn capacity(&self) -> usize {
-        self.nodes.len()
-    }
+    fn total_bytes(&self) -> usize;
 
-    pub fn size_in_mb(&self) -> usize {
-        self.size_in_mb
-    }
+    fn edges(&self, node: &Self::Node) -> &[EdgeOf<Self>];
 
-    pub fn is_full(&self) -> bool {
-        self.len() >= self.capacity()
-    }
+    fn edge_index(&self, node: &Self::Node, position: usize) -> EdgeIndex;
 
-    pub fn create_node(&self) -> Option<NodeIndex> {
-        let node_idx = self
-            .current_len
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |len| {
-                (len < self.capacity()).then_some(len + 1)
-            })
-            .ok()?;
-
-        self.nodes[node_idx].clear();
-        Some(NodeIndex::new(node_idx))
-    }
-
-    pub fn create_child(&self, node_idx: NodeIndex, edge_idx: EdgeIndex) -> Option<NodeIndex> {
-        let child_idx = self.create_node()?;
-        self[node_idx].edges()[edge_idx].set_child(child_idx);
-        Some(child_idx)
-    }
-
-    pub fn get_or_create_child(
+    fn expand(
         &self,
-        node_idx: NodeIndex,
-        edge_idx: EdgeIndex,
-    ) -> Option<NodeIndex> {
-        let child_idx = self[node_idx].edges()[edge_idx].child();
+        node: &Self::Node,
+        count: usize,
+        fill: impl FnOnce(&[EdgeOf<Self>]),
+    ) -> Result<(), TreeFull>;
 
-        if child_idx == NodeIndex::NULL {
-            self.create_child(node_idx, edge_idx)
-        } else {
-            Some(child_idx)
-        }
-    }
-}
-
-impl<N> Index<NodeIndex> for Tree<N> {
-    type Output = N;
-
-    fn index(&self, index: NodeIndex) -> &Self::Output {
-        self.nodes.get(index.raw() as usize).unwrap()
-    }
+    fn get_or_create_child(&self, edge: EdgeIndex, key: NodeKey) -> Result<Child, TreeFull>;
 }

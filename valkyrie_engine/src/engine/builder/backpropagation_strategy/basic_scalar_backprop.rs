@@ -57,14 +57,14 @@ where
         node: &C::Node,
         edge_idx: Option<EdgeIndex>,
         _params: &Self::Params,
-        _engine: &Engine<C>,
+        engine: &Engine<C>,
     ) -> <C::Simulation as SimulationStrategy<C>>::Output {
         node.add_visit();
 
         if let Some(edge_idx) = edge_idx {
-            let edges = node.edges();
-            edges[edge_idx].add_visit();
-            edges[edge_idx].add_score(f64::from(payload.as_scalar()));
+            let edge = &engine.tree()[edge_idx];
+            edge.add_visit();
+            edge.add_score(f64::from(payload.as_scalar()));
         }
 
         payload

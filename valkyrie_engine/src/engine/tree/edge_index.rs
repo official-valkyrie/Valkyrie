@@ -34,49 +34,17 @@
     documentation.
 */
 
-use std::ops::{Index, IndexMut};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EdgeIndex(usize);
 
 impl EdgeIndex {
     #[inline]
-    pub fn new(value: usize) -> Self {
+    pub(crate) fn new(value: usize) -> Self {
         Self(value)
     }
 
     #[inline]
-    pub fn raw(&self) -> usize {
+    pub(crate) fn raw(&self) -> usize {
         self.0
-    }
-}
-
-impl From<usize> for EdgeIndex {
-    #[inline]
-    fn from(value: usize) -> Self {
-        Self(value)
-    }
-}
-
-impl From<EdgeIndex> for usize {
-    #[inline]
-    fn from(value: EdgeIndex) -> Self {
-        value.0
-    }
-}
-
-impl<T> Index<EdgeIndex> for Vec<T> {
-    type Output = T;
-
-    #[inline]
-    fn index(&self, index: EdgeIndex) -> &Self::Output {
-        &self[index.0]
-    }
-}
-
-impl<T> IndexMut<EdgeIndex> for Vec<T> {
-    #[inline]
-    fn index_mut(&mut self, index: EdgeIndex) -> &mut Self::Output {
-        &mut self[index.0]
     }
 }

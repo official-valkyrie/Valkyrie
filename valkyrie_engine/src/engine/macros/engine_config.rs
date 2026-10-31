@@ -46,13 +46,14 @@ macro_rules! define_engine_config {
             $( type $s_assoc: Strategy; )+
             type Edge: $crate::engine::tree::components::EdgeType;
             type Node: $crate::engine::tree::components::NodeType<Edge = Self::Edge>;
+            type Tree: $crate::engine::tree::Tree<Node = Self::Node>;
         }
 
         pub struct EngineBuilder<
             $( $s_assoc = $s_default, )+
-            NodeSlot = Unspecified,
+            TreeSlot = Unspecified,
         >(
-            ::std::marker::PhantomData<fn() -> ($( $s_assoc, )+ NodeSlot)>,
+            ::std::marker::PhantomData<fn() -> ($( $s_assoc, )+ TreeSlot)>,
         );
 
         impl EngineBuilder {
@@ -72,41 +73,42 @@ macro_rules! define_engine_config {
             [ $( $s_assoc | $s_method ),+ ]
         );
 
-        impl< $( $s_assoc, )+ NodeSlot > EngineBuilder< $( $s_assoc, )+ NodeSlot > {
-            pub fn node<__N>(self) -> EngineBuilder< $( $s_assoc, )+ __N > {
+        impl< $( $s_assoc, )+ TreeSlot > EngineBuilder< $( $s_assoc, )+ TreeSlot > {
+            pub fn tree<__T>(self) -> EngineBuilder< $( $s_assoc, )+ __T > {
                 EngineBuilder(::std::marker::PhantomData)
             }
         }
 
-        pub struct GenericConfig< $( $s_assoc, )+ NodeSlot >(
-            ::std::marker::PhantomData<fn() -> ($( $s_assoc, )+ NodeSlot)>,
+        pub struct GenericConfig< $( $s_assoc, )+ TreeSlot >(
+            ::std::marker::PhantomData<fn() -> ($( $s_assoc, )+ TreeSlot)>,
         );
 
-        impl< $( $s_assoc, )+ NodeSlot > EngineConfig for GenericConfig< $( $s_assoc, )+ NodeSlot >
+        impl< $( $s_assoc, )+ TreeSlot > EngineConfig for GenericConfig< $( $s_assoc, )+ TreeSlot >
         where
             $( $s_assoc: Strategy, )+
-            NodeSlot: $crate::engine::tree::components::NodeType,
+            TreeSlot: $crate::engine::tree::Tree,
         {
             $( type $s_assoc = $s_assoc; )+
-            type Node = NodeSlot;
-            type Edge = <NodeSlot as $crate::engine::tree::components::NodeType>::Edge;
+            type Tree = TreeSlot;
+            type Node = <TreeSlot as $crate::engine::tree::Tree>::Node;
+            type Edge = <<TreeSlot as $crate::engine::tree::Tree>::Node as $crate::engine::tree::components::NodeType>::Edge;
         }
 
         #[doc(hidden)]
         pub trait Buildable: EngineConfig {}
 
-        impl< $( $s_assoc, )+ NodeSlot > Buildable for GenericConfig< $( $s_assoc, )+ NodeSlot >
+        impl< $( $s_assoc, )+ TreeSlot > Buildable for GenericConfig< $( $s_assoc, )+ TreeSlot >
         where
             Self: EngineConfig,
             $( $s_assoc: $s_bound<Self>, )+
         {
         }
 
-        impl< $( $s_assoc, )+ NodeSlot > EngineBuilder< $( $s_assoc, )+ NodeSlot >
+        impl< $( $s_assoc, )+ TreeSlot > EngineBuilder< $( $s_assoc, )+ TreeSlot >
         where
-            GenericConfig< $( $s_assoc, )+ NodeSlot >: Buildable,
+            GenericConfig< $( $s_assoc, )+ TreeSlot >: Buildable,
         {
-            pub fn build(self) -> $crate::Engine<GenericConfig< $( $s_assoc, )+ NodeSlot >> {
+            pub fn build(self) -> $crate::Engine<GenericConfig< $( $s_assoc, )+ TreeSlot >> {
                 $crate::Engine::new(EngineParams::new())
             }
         }
@@ -184,11 +186,11 @@ macro_rules! define_engine_config {
         [ $cur_assoc:ident | $cur_method:ident
           $( , $r_assoc:ident | $r_method:ident )* ]
     ) => {
-        impl< $( $b_assoc, )* $cur_assoc, $( $r_assoc, )* NodeSlot >
-            EngineBuilder< $( $b_assoc, )* $cur_assoc, $( $r_assoc, )* NodeSlot >
+        impl< $( $b_assoc, )* $cur_assoc, $( $r_assoc, )* TreeSlot >
+            EngineBuilder< $( $b_assoc, )* $cur_assoc, $( $r_assoc, )* TreeSlot >
         {
             pub fn $cur_method<__S>(self)
-                -> EngineBuilder< $( $b_assoc, )* __S, $( $r_assoc, )* NodeSlot >
+                -> EngineBuilder< $( $b_assoc, )* __S, $( $r_assoc, )* TreeSlot >
             {
                 EngineBuilder(::std::marker::PhantomData)
             }

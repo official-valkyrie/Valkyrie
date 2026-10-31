@@ -127,8 +127,8 @@ impl<C: EngineConfig> Shell<C> {
         Arc::get_mut(&mut self.engine).expect("the engine is shared while a search is running")
     }
 
-    pub fn shared_engine(&self) -> &Arc<Engine<C>> {
-        &self.engine
+    pub fn shared_engine(&mut self) -> &mut Arc<Engine<C>> {
+        &mut self.engine
     }
 
     pub fn start_search(

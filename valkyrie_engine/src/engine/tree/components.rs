@@ -34,7 +34,7 @@
     documentation.
 */
 
-use std::sync::{RwLockReadGuard, RwLockWriteGuard};
+use super::EdgeRange;
 
 mod child;
 mod draw_chance;
@@ -79,11 +79,11 @@ pub trait NodeType:
 {
     type Edge: EdgeType;
 
-    fn edges(&self) -> RwLockReadGuard<'_, Vec<Self::Edge>>;
-    fn edges_mut(&self) -> RwLockWriteGuard<'_, Vec<Self::Edge>>;
+    fn edge_range(&self) -> EdgeRange;
+    fn set_edge_range(&self, range: EdgeRange);
 
     #[inline]
     fn edge_count(&self) -> usize {
-        self.edges().len()
+        self.edge_range().count()
     }
 }

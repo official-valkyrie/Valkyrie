@@ -54,9 +54,9 @@ where
         node: &C::Node,
         line_idx: usize,
         _params: &Self::Params,
-        _engine: &Engine<C>,
+        engine: &Engine<C>,
     ) -> Option<EdgeIndex> {
-        let edges = node.edges();
+        let edges = engine.tree().edges(node);
 
         let mut ranking: Vec<usize> = (0..edges.len())
             .filter(|&edge_idx| edges[edge_idx].visits() > 0)
@@ -70,6 +70,6 @@ where
 
         ranking
             .get(line_idx)
-            .map(|&edge_idx| EdgeIndex::new(edge_idx))
+            .map(|&edge_idx| engine.tree().edge_index(node, edge_idx))
     }
 }

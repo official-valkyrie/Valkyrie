@@ -48,7 +48,10 @@ pub use crate::engine::{
     SearchStats, StrategyParams, UciOptionType, View, WinChance,
 };
 
-pub use crate::engine::tree::{AtomicNodeIndex, EdgeIndex, EdgesStore, NodeIndex, Tree};
+pub use crate::engine::tree::{
+    AtomicNodeIndex, Child, EdgeIndex, EdgeRange, NodeIndex, NodeKey, SequentialTree, Tree,
+    TreeFull,
+};
 
 pub use crate::engine::tree::components::{EdgeType, HasComponent, NodeType, Score};
 

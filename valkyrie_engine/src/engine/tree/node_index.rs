@@ -40,15 +40,15 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub struct NodeIndex(usize);
 
 impl NodeIndex {
-    pub const NULL: Self = Self(usize::MAX);
+    pub(crate) const NULL: Self = Self(usize::MAX);
 
     #[inline]
-    pub fn new(value: usize) -> Self {
+    pub(crate) fn new(value: usize) -> Self {
         Self(value)
     }
 
     #[inline]
-    pub fn raw(&self) -> usize {
+    pub(crate) fn raw(&self) -> usize {
         self.0
     }
 }
@@ -59,29 +59,10 @@ impl Default for NodeIndex {
     }
 }
 
-impl From<usize> for NodeIndex {
-    #[inline]
-    fn from(value: usize) -> Self {
-        Self(value)
-    }
-}
-
-impl From<NodeIndex> for usize {
-    #[inline]
-    fn from(value: NodeIndex) -> Self {
-        value.0
-    }
-}
-
 #[derive(Debug)]
 pub struct AtomicNodeIndex(AtomicUsize);
 
 impl AtomicNodeIndex {
-    #[inline]
-    pub fn new(index: NodeIndex) -> Self {
-        Self(AtomicUsize::new(index.raw()))
-    }
-
     #[inline]
     pub fn null() -> Self {
         Self(AtomicUsize::new(NodeIndex::NULL.raw()))
@@ -89,12 +70,12 @@ impl AtomicNodeIndex {
 
     #[inline]
     pub fn load(&self) -> NodeIndex {
-        NodeIndex::new(self.0.load(Ordering::Relaxed))
+        NodeIndex::new(self.0.load(Ordering::Acquire))
     }
 
     #[inline]
     pub fn store(&self, index: NodeIndex) {
-        self.0.store(index.raw(), Ordering::Relaxed);
+        self.0.store(index.raw(), Ordering::Release);
     }
 }
 

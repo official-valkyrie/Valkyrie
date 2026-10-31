@@ -59,7 +59,7 @@ where
     C::Node: HasVisits,
     C::Edge: HasVisits + HasPolicy + HasQ,
 {
-    fn execute(node: &C::Node, params: &Self::Params, _engine: &Engine<C>) -> EdgeIndex {
+    fn execute(node: &C::Node, params: &Self::Params, engine: &Engine<C>) -> EdgeIndex {
         assert!(node.edge_count() > 0);
 
         let cpuct = params.cpuct();
@@ -68,7 +68,7 @@ where
         let mut edge_idx = usize::MAX;
         let mut best_puct = f32::NEG_INFINITY;
 
-        for (idx, edge) in node.edges().iter().enumerate() {
+        for (idx, edge) in engine.tree().edges(node).iter().enumerate() {
             let child_visits = edge.visits();
             let score = if child_visits > 0 {
                 edge.q()
@@ -88,7 +88,7 @@ where
 
         assert_ne!(edge_idx, usize::MAX);
 
-        EdgeIndex::new(edge_idx)
+        engine.tree().edge_index(node, edge_idx)
     }
 }
 
