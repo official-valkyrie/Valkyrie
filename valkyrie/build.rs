@@ -68,9 +68,11 @@ fn main() {
 
 #[cfg(feature = "release")]
 fn main() {
-    let formatted_name = format!("Valkyrie v{}", env!("CARGO_PKG_VERSION"));
+    let formatted_name = std::env::var("ENGINE_NAME")
+        .unwrap_or_else(|_| format!("Valkyrie v{}", env!("CARGO_PKG_VERSION")));
 
     println!("cargo:rustc-env=ENGINE_NAME={formatted_name}");
 
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-env-changed=ENGINE_NAME");
 }

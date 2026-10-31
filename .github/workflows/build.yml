@@ -2,46 +2,157 @@ name: Build
 
 on:
   push:
-    branches: [main, initial]
-  pull_request:
     branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build:
+    name: build (${{ matrix.os }}, ${{ matrix.target }})
+    if: github.event.action != 'edited' || github.event.changes.body
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        target: [v2, v3-nopext, v3, v4]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: true
+      - uses: actions/checkout@v5
 
-      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build
-        run: cargo build --release -p valkyrie --bin valkyrie
+      - if: runner.os == 'Windows'
+        run: command -v make || choco install make -y --no-progress
 
-  lint:
+      - run: |
+          name="valkyrie-preview-$(git log -1 --format=%cd-%h --date=format:%Y%m%d --abbrev=8)"
+          make release-${{ matrix.target }} EXE="$name" ENGINE_NAME="$name"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.os }}-${{ matrix.target }}
+          path: releases
+
+  bench:
+    name: bench (${{ matrix.os }}, ${{ matrix.target }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        target: [v2, v3-nopext, v3, v4]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: binary-${{ matrix.os }}-${{ matrix.target }}
+          path: releases
+
+      - run: |
+          if [ "${{ matrix.target }}" = v4 ] && ! grep -qw avx512f /proc/cpuinfo; then
+            echo "::notice::Runner has no AVX-512, skipping v4 bench"
+            exit 0
+          fi
+          chmod +x releases/*/*
+          releases/*/* bench | tee bench.txt
+          mkdir bench
+          sed -n 's/^Bench: \([0-9]*\) nodes.*/\1/p' bench.txt > "bench/${{ matrix.os }}-${{ matrix.target }}"
+          test -s "bench/${{ matrix.os }}-${{ matrix.target }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ matrix.os }}-${{ matrix.target }}
+          path: bench
+          if-no-files-found: ignore
+
+  node-count:
+    name: node count
+    needs: bench
     runs-on: ubuntu-latest
+    outputs:
+      nodes: ${{ steps.nodes.outputs.nodes }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
-          lfs: true
+          pattern: bench-*
+          path: bench
+          merge-multiple: true
 
-      - uses: dtolnay/rust-toolchain@stable
+      - id: nodes
+        run: |
+          grep . bench/*
+          if [ "$(sort -u bench/* | wc -l)" -ne 1 ]; then
+            echo "::error::Bench node counts differ between builds"
+            exit 1
+          fi
+          echo "nodes=$(sort -u bench/*)" >> "$GITHUB_OUTPUT"
+
+  bench-correctness:
+    name: bench correctness
+    needs: node-count
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}
+      NODES: ${{ needs.node-count.outputs.nodes }}
+    steps:
+      - run: |
+          body=$(gh api "$PR" --jq '.body // ""' | tr -d '\r')
+          last=$(printf '%s\n' "$body" | grep -v '^[[:space:]]*$' | tail -n 1 || true)
+          if [[ $last =~ ^Bench:\ *([0-9]+)[[:space:]]*$ ]]; then
+            if [ "${BASH_REMATCH[1]}" != "$NODES" ]; then
+              echo "::error title=Incorrect bench::PR description says Bench: ${BASH_REMATCH[1]}, bench gives $NODES"
+              exit 1
+            fi
+          else
+            if [ -n "$body" ]; then
+              printf '%s\n\nBench: %s\n' "$body" "$NODES" > body.md
+            else
+              printf 'Bench: %s\n' "$NODES" > body.md
+            fi
+            gh api -X PATCH "$PR" -F body=@body.md > /dev/null ||
+              echo "::warning::Could not add Bench: $NODES to the PR description"
+          fi
+
+  preview:
+    name: preview release
+    needs: node-count
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NODES: ${{ needs.node-count.outputs.nodes }}
+    steps:
+      - uses: actions/download-artifact@v4
         with:
-          components: clippy, rustfmt
+          pattern: binary-*
+          path: dist
+          merge-multiple: true
 
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+      - run: |
+          name=$(ls dist)
+          gh release create "$name" dist/"$name"/* \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "$name" \
+            --notes "Bench: $NODES" \
+            --prerelease

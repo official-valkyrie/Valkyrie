@@ -6,6 +6,10 @@ VERSION      = $(lastword $(subst @, ,$(lastword $(subst $(HASH), ,$(shell cargo
 RELEASE_NAME = Valkyrie-v$(VERSION)
 RELEASE_DIR  = releases/$(RELEASE_NAME)
 
+ifeq ($(origin EXE),command line)
+    RELEASE_NAME = $(EXE)
+endif
+
 comma := ,
 space := $(subst x,,x x)
 
@@ -22,10 +26,13 @@ DEST        = $(EXE)$(EXT)
 DEST_DIR    = .
 
 ifeq ($(OS),Windows_NT)
+    SHELL         := cmd.exe
+    PLATFORM      = windows
     SET_RUSTFLAGS = set RUSTFLAGS=$(CPU_FLAGS) &&
     MKDIR_CMD     = if not exist "$(subst /,\,$(DEST_DIR))" mkdir "$(subst /,\,$(DEST_DIR))"
     COPY_CMD      = copy /Y "$(subst /,\,$(SRC))" "$(subst /,\,$(DEST))" >nul
 else
+    PLATFORM      = $(shell uname -s | tr A-Z a-z)
     SET_RUSTFLAGS = RUSTFLAGS="$(CPU_FLAGS)"
     MKDIR_CMD     = mkdir -p "$(DEST_DIR)"
     COPY_CMD      = cp "$(SRC)" "$(DEST)"
@@ -61,7 +68,7 @@ release-%:         CARGO_FLAGS = --features release
 release-%:         override TARGET_FEATURES =
 release-%:         override FEATURES =
 release-%:         DEST_DIR = $(RELEASE_DIR)
-release-%:         DEST = $(RELEASE_DIR)/$(RELEASE_NAME)-$(patsubst release-%,%,$@)$(EXT)
+release-%:         DEST = $(RELEASE_DIR)/$(RELEASE_NAME)-$(PLATFORM)-$(patsubst release-%,%,$@)$(EXT)
 
 release: $(addprefix release-,$(RELEASE_TARGETS))
 

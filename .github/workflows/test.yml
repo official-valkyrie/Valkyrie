@@ -2,29 +2,35 @@ name: Tests
 
 on:
   push:
-    branches: [main, initial]
-  pull_request:
     branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: test (${{ matrix.os }}, ${{ matrix.cpu }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        cpu: [x86-64, x86-64-v3]
+    runs-on: ${{ matrix.os }}
+    env:
+      RUSTFLAGS: -C target-cpu=${{ matrix.cpu }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: true
+      - uses: actions/checkout@v5
 
-      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.cpu }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Run tests
-        run: cargo test --all
-
-      - name: Run tests with PEXT slider tables
-        run: cargo test --all
-        env:
-          RUSTFLAGS: -C target-cpu=x86-64-v3
+      - run: cargo test --all
