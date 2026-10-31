@@ -37,7 +37,7 @@
 use std::ops::Index;
 
 use crate::engine::tree::{
-    Child, EdgeIndex, EdgeOf, NodeIndex, NodeKey, Tree, TreeFull,
+    EdgeIndex, EdgeOf, NodeIndex, NodeKey, Tree, TreeFull,
     arena::Arena,
     components::{HasChild, NodeType, link_child},
 };
@@ -111,15 +111,15 @@ impl<N: NodeType> Tree for SequentialTree<N> {
         Ok(())
     }
 
-    fn get_or_create_child(&self, edge: EdgeIndex, _key: NodeKey) -> Result<Child, TreeFull> {
+    fn get_or_create_child(&self, edge: EdgeIndex, _key: NodeKey) -> Result<NodeIndex, TreeFull> {
         let edge = &self[edge];
         if edge.has_child() {
-            return Ok(Child::Found(edge.child()));
+            return Ok(edge.child());
         }
 
         let child_idx = self.arena.alloc_node().ok_or(TreeFull)?;
         link_child(edge, child_idx);
-        Ok(Child::Created(child_idx))
+        Ok(child_idx)
     }
 }
 
@@ -176,7 +176,7 @@ mod tests {
         let created = tree.get_or_create_child(edge, NodeKey::new(0, 0)).unwrap();
         let found = tree.get_or_create_child(edge, NodeKey::new(0, 0)).unwrap();
 
-        assert_eq!(created, Child::Created(found.index()));
-        assert_eq!(found, Child::Found(tree[edge].child()));
+        assert_eq!(created, found);
+        assert_eq!(found, tree[edge].child());
     }
 }

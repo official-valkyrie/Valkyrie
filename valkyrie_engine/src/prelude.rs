@@ -49,8 +49,7 @@ pub use crate::engine::{
 };
 
 pub use crate::engine::tree::{
-    AtomicNodeIndex, Child, EdgeIndex, EdgeRange, NodeIndex, NodeKey, SequentialTree, Tree,
-    TreeFull,
+    AtomicNodeIndex, EdgeIndex, EdgeRange, NodeIndex, NodeKey, SequentialTree, Tree, TreeFull,
 };
 
 pub use crate::engine::tree::components::{EdgeType, HasComponent, NodeType, Score};

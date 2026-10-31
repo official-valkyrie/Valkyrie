@@ -34,7 +34,6 @@
     documentation.
 */
 
-pub mod child;
 pub mod components;
 pub mod edge_range;
 pub mod edges;
@@ -50,7 +49,6 @@ use std::ops::Index;
 
 use components::NodeType;
 
-pub use child::Child;
 pub use edge_index::EdgeIndex;
 pub use edge_range::{EdgeRange, EdgeRangeStore};
 pub use node_index::{AtomicNodeIndex, NodeIndex};
@@ -103,7 +101,7 @@ pub trait Tree:
         fill: impl FnOnce(&[EdgeOf<Self>]),
     ) -> Result<(), TreeFull>;
 
-    fn get_or_create_child(&self, edge: EdgeIndex, key: NodeKey) -> Result<Child, TreeFull>;
+    fn get_or_create_child(&self, edge: EdgeIndex, key: NodeKey) -> Result<NodeIndex, TreeFull>;
 
     #[inline]
     fn node_entered(&self, _node: NodeIndex) {}

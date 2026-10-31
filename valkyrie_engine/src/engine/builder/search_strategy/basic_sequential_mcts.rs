@@ -140,48 +140,26 @@ where
         let engine = self.engine;
         let tree = engine.tree();
 
-        let child = match edge {
-            Some(edge) => tree
-                .get_or_create_child(edge, NodeKey::from(&*position))
-                .ok()?,
-            None => Child::Found(tree.root_index()),
-        };
+        let node_idx = self.node_idx(edge, position)?;
+        let node = &tree[node_idx];
+        let unvisited = node.visits() == 0;
 
-        tree.node_entered(child.index());
-        let result = self.visit_node(edge, child, position);
-        tree.node_exited(child.index());
+        tree.node_entered(node_idx);
 
-        result
-    }
-
-    fn visit_node(
-        &mut self,
-        edge: Option<EdgeIndex>,
-        child: Child,
-        position: &mut ChessPosition,
-    ) -> Option<<C::Simulation as SimulationStrategy<C>>::Output> {
-        let engine = self.engine;
-        let tree = engine.tree();
-        let created = child.is_created();
-        let current_node = &tree[child.index()];
-
-        let (payload, edge_idx) = if edge.is_some()
-            && (created || current_node.edge_count() == 0 || current_node.is_terminal())
-        {
-            if created {
-                current_node.set_game_state(position.game_state(engine.position()));
+        let (payload, edge_idx) = if edge.is_some() && (unvisited || node.is_terminal()) {
+            if unvisited {
+                node.set_game_state(position.game_state(engine.position()));
             }
 
-            let payload = self.simulate_node(&[], current_node, position);
+            let payload = self.simulate_node(&[], node, position);
 
-            if created && !current_node.is_terminal() {
-                self.expand_node(current_node, position, false).ok()?;
+            if unvisited && !node.is_terminal() {
+                self.expand_node(node, position, false).ok()?;
             }
 
             (payload, None)
         } else {
-            let edge_idx =
-                C::Exploration::execute(current_node, engine.params().exploration(), engine);
+            let edge_idx = C::Exploration::execute(node, engine.params().exploration(), engine);
 
             position.make_move(tree[edge_idx].mv());
             self.depth = self.depth.saturating_add(1);
@@ -193,11 +171,13 @@ where
 
         let backed_up = C::Backpropagation::execute(
             payload,
-            current_node,
+            node,
             edge_idx,
             engine.params().backpropagation(),
             engine,
         );
+
+        tree.node_exited(node_idx);
 
         Some(backed_up.flipped())
     }
@@ -240,6 +220,15 @@ where
                 self.engine.params().simulation(),
                 self.engine,
             ),
+        }
+    }
+
+    fn node_idx(&self, edge: Option<EdgeIndex>, position: &ChessPosition) -> Option<NodeIndex> {
+        let tree = self.engine.tree();
+
+        match edge {
+            Some(edge) => tree.get_or_create_child(edge, NodeKey::from(position)).ok(),
+            None => Some(tree.root_index()),
         }
     }
 }
