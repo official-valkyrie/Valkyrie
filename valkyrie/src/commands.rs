@@ -85,9 +85,13 @@ impl<C: EngineConfig> Registry<C> {
     }
 
     pub fn find(&self, token: &str) -> Option<&Command<C>> {
-        self.commands
-            .iter()
-            .find(|command| command.name == token || command.aliases.contains(&token))
+        self.commands.iter().find(|command| {
+            command.name.eq_ignore_ascii_case(token)
+                || command
+                    .aliases
+                    .iter()
+                    .any(|alias| alias.eq_ignore_ascii_case(token))
+        })
     }
 }
 

@@ -97,7 +97,7 @@ where
             .filter(|command| command.cli_stage.is_some())
             .map(|command| Lookup {
                 name: command.name,
-                primary: command.name == token,
+                primary: command.name.eq_ignore_ascii_case(token),
             })
     });
 

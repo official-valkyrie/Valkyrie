@@ -58,7 +58,7 @@ impl GeneralProcessor {
             },
             Command {
                 name: "version",
-                aliases: &["V"],
+                aliases: &["v"],
                 category: Category::General,
                 cli_stage: Some(stage::RUN),
                 during_search: false,

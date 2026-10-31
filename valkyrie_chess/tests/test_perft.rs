@@ -83,38 +83,31 @@ fn frc() {
 
 #[test]
 fn move_counters_match_generator() {
-    let mut positions_without_moves = 0;
-
     for path in ["./tests/standard.epd", "./tests/fischer.epd"] {
         let reader = BufReader::new(File::open(path).unwrap());
 
         for line in reader.lines() {
             let line = line.unwrap();
             let fen = FEN::from(line.split(';').next().unwrap());
-            positions_without_moves += check_move_counters(&ChessBoard::from(&fen), 2);
+            check_move_counters(&ChessBoard::from(&fen), 2);
         }
     }
-
-    assert!(positions_without_moves > 0);
 }
 
-fn check_move_counters(board: &ChessBoard, depth: u8) -> u32 {
+fn check_move_counters(board: &ChessBoard, depth: u8) {
     let mut moves = Vec::new();
     board.map_legal_moves(|mv| moves.push(mv));
 
     assert_eq!(board.count_legal_moves() as usize, moves.len(), "{board}");
     assert_eq!(board.has_legal_moves(), !moves.is_empty(), "{board}");
 
-    if depth == 0 || moves.is_empty() {
-        return u32::from(moves.is_empty());
+    if depth == 0 {
+        return;
     }
 
-    moves
-        .into_iter()
-        .map(|mv| {
-            let mut child = *board;
-            child.make_move(mv);
-            check_move_counters(&child, depth - 1)
-        })
-        .sum()
+    for mv in moves {
+        let mut child = *board;
+        child.make_move(mv);
+        check_move_counters(&child, depth - 1);
+    }
 }

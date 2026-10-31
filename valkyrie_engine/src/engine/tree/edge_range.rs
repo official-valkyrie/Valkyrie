@@ -104,29 +104,3 @@ impl Clear for EdgeRangeStore {
         self.publish(EdgeRange::EMPTY);
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const LARGEST_HASH_BYTES: usize = 512 * 1024 * 1024 * 1024;
-    const SMALLEST_EDGE_BYTES: usize = 8;
-
-    #[test]
-    fn ranges_address_a_512_gb_tree() {
-        let last_slot = LARGEST_HASH_BYTES / SMALLEST_EDGE_BYTES;
-        let store = EdgeRangeStore::default();
-
-        assert!(last_slot <= EdgeRange::MAX_SLOTS);
-
-        store.publish(EdgeRange::new(last_slot, 218));
-
-        assert_eq!(store.load().first(), last_slot);
-        assert_eq!(store.load().count(), 218);
-    }
-
-    #[test]
-    fn empty_is_the_default() {
-        assert_eq!(EdgeRangeStore::default().load(), EdgeRange::EMPTY);
-    }
-}

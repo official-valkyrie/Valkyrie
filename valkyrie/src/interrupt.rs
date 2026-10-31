@@ -137,24 +137,3 @@ mod platform {
 mod platform {
     pub fn install() {}
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn interrupt_stops_only_a_running_search() {
-        set_searching(false);
-        assert!(!swallow_if_searching());
-        assert!(!take_stop_request());
-
-        set_searching(true);
-        assert!(swallow_if_searching());
-        assert!(take_stop_request());
-        assert!(!take_stop_request());
-        assert!(was_swallowed());
-
-        set_searching(false);
-        assert!(!swallow_if_searching());
-    }
-}

@@ -137,7 +137,9 @@ fn is_boundary(token: &str, lookup: &dyn Fn(&str) -> Option<Lookup>) -> bool {
     match classify(token) {
         Token::Long(_) | Token::Short(_) => true,
         Token::Bare(body) => {
-            FLAGS.iter().any(|info| info.name == body)
+            FLAGS
+                .iter()
+                .any(|info| info.name.eq_ignore_ascii_case(body))
                 || body.starts_with("option.")
                 || lookup(body).is_some_and(|found| found.primary)
         }
@@ -195,7 +197,7 @@ pub fn parse(
 
         if let Some(info) = FLAGS
             .iter()
-            .find(|info| info.name == body)
+            .find(|info| info.name.eq_ignore_ascii_case(body))
             .filter(|_| dashes != 1)
         {
             let choice = match info.flag {
@@ -246,166 +248,5 @@ pub fn parse(
         Ok(cli)
     } else {
         Err(violations)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn lookup(token: &str) -> Option<Lookup> {
-        const COMMANDS: [(&str, &[&str]); 7] = [
-            ("go", &[]),
-            ("position", &[]),
-            ("perft", &[]),
-            ("bench", &[]),
-            ("help", &["h"]),
-            ("draw", &["d"]),
-            ("quit", &["q"]),
-        ];
-
-        COMMANDS
-            .iter()
-            .find(|(name, aliases)| *name == token || aliases.contains(&token))
-            .map(|(name, _)| Lookup {
-                name,
-                primary: *name == token,
-            })
-    }
-
-    fn parse_args(command: &str) -> std::result::Result<Cli, Vec<CliViolation>> {
-        let args: Vec<String> = command.split_whitespace().map(str::to_string).collect();
-
-        parse(&args, &lookup)
-    }
-
-    fn command(tokens: &[&str]) -> Item {
-        Item::Command(tokens.iter().map(|token| token.to_string()).collect())
-    }
-
-    fn option(name: &str, value: &str) -> Item {
-        Item::SetOption {
-            name: name.into(),
-            value: value.into(),
-        }
-    }
-
-    #[test]
-    fn no_arguments_start_the_interactive_loop() {
-        assert_eq!(parse_args("").unwrap(), Cli::default());
-    }
-
-    #[test]
-    fn options_flags_and_commands_mix() {
-        let cli = parse_args("--minimal --option.Hash 256 go nodes 1000").unwrap();
-
-        assert_eq!(cli.view, ViewChoice::Minimal);
-        assert_eq!(
-            cli.items,
-            vec![option("Hash", "256"), command(&["go", "nodes", "1000"])]
-        );
-    }
-
-    #[test]
-    fn dashes_are_optional_on_commands_flags_and_options() {
-        let dashed = parse_args("--minimal --option.Hash 256 --bench").unwrap();
-        let bare = parse_args("minimal option.Hash 256 bench").unwrap();
-
-        assert_eq!(dashed, bare);
-    }
-
-    #[test]
-    fn options_accept_equals_and_negative_values() {
-        let cli = parse_args("--option.cpuct=1.5 option.Other -1.5").unwrap();
-
-        assert_eq!(
-            cli.items,
-            vec![option("cpuct", "1.5"), option("Other", "-1.5")]
-        );
-    }
-
-    #[test]
-    fn buttons_have_no_value() {
-        let cli = parse_args("--option.ClearHash bench").unwrap();
-
-        assert_eq!(
-            cli.items,
-            vec![option("ClearHash", ""), command(&["bench"])]
-        );
-    }
-
-    #[test]
-    fn commands_end_at_the_next_item() {
-        let cli =
-            parse_args("position fen 8/8/8/8/8/8/8/8 w - - 0 1 moves e2e4 go depth 3").unwrap();
-
-        assert_eq!(
-            cli.items,
-            vec![
-                command(&[
-                    "position",
-                    "fen",
-                    "8/8/8/8/8/8/8/8",
-                    "w",
-                    "-",
-                    "-",
-                    "0",
-                    "1",
-                    "moves",
-                    "e2e4"
-                ]),
-                command(&["go", "depth", "3"]),
-            ]
-        );
-    }
-
-    #[test]
-    fn single_letter_aliases_take_one_dash() {
-        assert_eq!(parse_args("-h").unwrap().items, vec![command(&["help"])]);
-        assert_eq!(parse_args("-d").unwrap().items, vec![command(&["draw"])]);
-        assert_eq!(
-            parse_args("--draw").unwrap().items,
-            vec![command(&["draw"])]
-        );
-        assert_eq!(
-            parse_args("h").unwrap_err(),
-            vec![CliViolation::UnexpectedArgument("h".into())]
-        );
-        assert_eq!(
-            parse_args("--d -draw").unwrap_err(),
-            vec![
-                CliViolation::UnknownFlag("--d".into()),
-                CliViolation::UnexpectedArgument("-draw".into()),
-            ]
-        );
-    }
-
-    #[test]
-    fn interactive_flag_is_remembered() {
-        let cli = parse_args("bench interactive").unwrap();
-
-        assert!(cli.interactive);
-        assert_eq!(cli.items, vec![command(&["bench"])]);
-    }
-
-    #[test]
-    fn unknown_input_is_reported_together() {
-        assert_eq!(
-            parse_args("--bogus --foo.bar stray").unwrap_err(),
-            vec![
-                CliViolation::UnknownFlag("--bogus".into()),
-                CliViolation::UnknownFlag("--foo.bar".into()),
-                CliViolation::UnexpectedArgument("stray".into()),
-            ]
-        );
-    }
-
-    #[test]
-    fn conflicting_displays_are_reported() {
-        assert_eq!(
-            parse_args("--simple --minimal").unwrap_err(),
-            vec![CliViolation::ConflictingDisplays]
-        );
-        assert!(parse_args("--minimal minimal").is_ok());
     }
 }

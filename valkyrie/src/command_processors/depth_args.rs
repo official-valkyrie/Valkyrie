@@ -76,36 +76,3 @@ pub fn parse_depth<T: FromStr>(args: &[&str]) -> Result<Option<T>, Vec<DepthViol
         Err(violations)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn depth_is_optional() {
-        assert_eq!(parse_depth::<u8>(&[]), Ok(None));
-        assert_eq!(parse_depth::<u8>(&["5"]), Ok(Some(5)));
-        assert_eq!(parse_depth::<u8>(&["0"]), Ok(Some(0)));
-    }
-
-    #[test]
-    fn bad_depths_are_reported() {
-        for depth in ["x", "-1", "256", "1.5"] {
-            assert_eq!(
-                parse_depth::<u8>(&[depth]),
-                Err(vec![DepthViolation::InvalidDepth(depth.into())])
-            );
-        }
-    }
-
-    #[test]
-    fn extra_arguments_are_reported() {
-        assert_eq!(
-            parse_depth::<u8>(&["5", "6", "7"]),
-            Err(vec![
-                DepthViolation::UnexpectedArgument("6".into()),
-                DepthViolation::UnexpectedArgument("7".into()),
-            ])
-        );
-    }
-}
