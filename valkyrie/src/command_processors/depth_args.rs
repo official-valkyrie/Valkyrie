@@ -34,29 +34,31 @@
     documentation.
 */
 
+use std::str::FromStr;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PerftViolation {
+pub enum DepthViolation {
     InvalidDepth(String),
     UnexpectedArgument(String),
 }
 
-impl std::fmt::Display for PerftViolation {
+impl std::fmt::Display for DepthViolation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidDepth(depth) => write!(f, "Incorrect perft depth '{depth}'"),
+            Self::InvalidDepth(depth) => write!(f, "Incorrect depth '{depth}'"),
             Self::UnexpectedArgument(argument) => write!(f, "Unexpected argument '{argument}'"),
         }
     }
 }
 
-pub fn parse_perft(args: &[&str]) -> Result<Option<u8>, Vec<PerftViolation>> {
+pub fn parse_depth<T: FromStr>(args: &[&str]) -> Result<Option<T>, Vec<DepthViolation>> {
     let mut violations = Vec::new();
 
     let depth = args.first().and_then(|depth| {
-        let parsed = depth.parse::<u8>().ok();
+        let parsed = depth.parse::<T>().ok();
 
         if parsed.is_none() {
-            violations.push(PerftViolation::InvalidDepth(depth.to_string()));
+            violations.push(DepthViolation::InvalidDepth(depth.to_string()));
         }
 
         parsed
@@ -65,7 +67,7 @@ pub fn parse_perft(args: &[&str]) -> Result<Option<u8>, Vec<PerftViolation>> {
     violations.extend(
         args.iter()
             .skip(1)
-            .map(|arg| PerftViolation::UnexpectedArgument(arg.to_string())),
+            .map(|arg| DepthViolation::UnexpectedArgument(arg.to_string())),
     );
 
     if violations.is_empty() {
@@ -81,17 +83,17 @@ mod tests {
 
     #[test]
     fn depth_is_optional() {
-        assert_eq!(parse_perft(&[]), Ok(None));
-        assert_eq!(parse_perft(&["5"]), Ok(Some(5)));
-        assert_eq!(parse_perft(&["0"]), Ok(Some(0)));
+        assert_eq!(parse_depth::<u8>(&[]), Ok(None));
+        assert_eq!(parse_depth::<u8>(&["5"]), Ok(Some(5)));
+        assert_eq!(parse_depth::<u8>(&["0"]), Ok(Some(0)));
     }
 
     #[test]
     fn bad_depths_are_reported() {
         for depth in ["x", "-1", "256", "1.5"] {
             assert_eq!(
-                parse_perft(&[depth]),
-                Err(vec![PerftViolation::InvalidDepth(depth.into())])
+                parse_depth::<u8>(&[depth]),
+                Err(vec![DepthViolation::InvalidDepth(depth.into())])
             );
         }
     }
@@ -99,10 +101,10 @@ mod tests {
     #[test]
     fn extra_arguments_are_reported() {
         assert_eq!(
-            parse_perft(&["5", "6", "7"]),
+            parse_depth::<u8>(&["5", "6", "7"]),
             Err(vec![
-                PerftViolation::UnexpectedArgument("6".into()),
-                PerftViolation::UnexpectedArgument("7".into()),
+                DepthViolation::UnexpectedArgument("6".into()),
+                DepthViolation::UnexpectedArgument("7".into()),
             ])
         );
     }

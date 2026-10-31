@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 valkyrie_engine = { workspace = true }
 valkyrie_chess = { workspace = true }
+valkyrie_tools = { workspace = true }
 
 [features]
 debug = ["valkyrie_engine/debug"]

@@ -119,6 +119,15 @@ macro_rules! define_engine_config {
             $( $s_method: <C::$s_assoc as Strategy>::Params, )+
         }
 
+        impl<C: EngineConfig> Clone for EngineParams<C> {
+            fn clone(&self) -> Self {
+                Self {
+                    general: self.general.clone(),
+                    $( $s_method: self.$s_method.clone(), )+
+                }
+            }
+        }
+
         impl<C: EngineConfig> EngineParams<C> {
             const OPTION_NAMES: $crate::OptionNames = $crate::OptionNames {
                 own: &[],

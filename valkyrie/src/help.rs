@@ -72,7 +72,7 @@ pub fn render<C: EngineConfig>(shell: &Shell<C>) -> String {
                         command
                             .aliases
                             .iter()
-                            .map(|alias| if !command.cli {
+                            .map(|alias| if command.cli_stage.is_none() {
                                 alias.to_string()
                             } else if alias.len() == 1 {
                                 format!("-{alias}")
@@ -89,7 +89,7 @@ pub fn render<C: EngineConfig>(shell: &Shell<C>) -> String {
                     format!(
                         "{}{aliases}{}",
                         command.description,
-                        if command.cli {
+                        if command.cli_stage.is_some() {
                             ""
                         } else {
                             ", interactive only"
@@ -129,7 +129,7 @@ pub fn render<C: EngineConfig>(shell: &Shell<C>) -> String {
         .max(MIN_DESCRIPTION_WIDTH);
 
     let mut text = format!(
-        "{}\n\nUsage: valkyrie [FLAGS] [--option.NAME VALUE]... [COMMAND [ARGS]]...\n       Leading dashes are optional on flags, commands and options.\n",
+        "{}\n\nUsage: valkyrie [FLAGS] [--option.NAME VALUE]... [COMMAND [ARGS]]...\n       Leading dashes are optional on flags, commands and options.\n       Options run first, then position, then commands in the given order.\n",
         env!("ENGINE_NAME")
     );
 

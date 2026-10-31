@@ -30,6 +30,7 @@ version = "0.1.0"
 dependencies = [
  "valkyrie_chess",
  "valkyrie_engine",
+ "valkyrie_tools",
 ]
 
 [[package]]
@@ -50,6 +51,14 @@ dependencies = [
 [[package]]
 name = "valkyrie_telemetry"
 version = "0.1.0"
+
+[[package]]
+name = "valkyrie_tools"
+version = "0.1.0"
+dependencies = [
+ "valkyrie_chess",
+ "valkyrie_engine",
+]
 
 [[package]]
 name = "windows-sys"

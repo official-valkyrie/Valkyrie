@@ -34,10 +34,10 @@
     documentation.
 */
 
+pub mod depth_args;
 pub mod general_processor;
 pub mod go_args;
 pub mod misc_processor;
-pub mod perft_args;
 pub mod position_args;
 pub mod uci_processor;
 

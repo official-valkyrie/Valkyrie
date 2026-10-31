@@ -34,6 +34,8 @@
     documentation.
 */
 
+use std::time::Duration;
+
 use valkyrie_engine::prelude::*;
 
 use crate::views::simple_view::SimpleView;
@@ -42,6 +44,10 @@ use crate::views::simple_view::SimpleView;
 pub struct MinimalView(SimpleView);
 
 impl View for MinimalView {
+    fn bench_finished(&self, nodes: u64, elapsed: Duration) {
+        self.0.bench_finished(nodes, elapsed)
+    }
+
     fn search_ended(&self, report: &SearchReport) {
         self.0.search_ended(report)
     }

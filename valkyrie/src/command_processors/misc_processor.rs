@@ -34,25 +34,37 @@
     documentation.
 */
 
-use std::process::Command as Process;
+use std::{process::Command as Process, sync::Arc};
 
 use valkyrie_chess::DEFAULT_PERFT_DEPTH;
-use valkyrie_engine::prelude::*;
+use valkyrie_engine::{
+    engine::tree::components::{HasPolicy, HasScore, HasVisits},
+    prelude::*,
+};
+use valkyrie_tools::{Bench, DEFAULT_BENCH_DEPTH};
 
 use crate::{
-    command_processors::{perft_args::parse_perft, print_violations},
+    command_processors::{depth_args::parse_depth, print_violations},
     commands::{Category, Command, Shell},
+    execution_queue::stage,
 };
 
 pub struct MiscProcessor;
 impl MiscProcessor {
-    pub fn commands<C: EngineConfig>() -> Vec<Command<C>> {
+    pub fn commands<C: EngineConfig>() -> Vec<Command<C>>
+    where
+        C::Search: SearchStrategy<C>,
+        C::TimeManager: TimeManagerStrategy<C>,
+        C::BestMove: BestMoveStrategy<C>,
+        C::Node: HasVisits,
+        C::Edge: HasScore + HasVisits + HasPolicy,
+    {
         vec![
             Command {
                 name: "draw",
                 aliases: &["d"],
                 category: Category::Tools,
-                cli: true,
+                cli_stage: Some(stage::RUN),
                 during_search: false,
                 usage: "draw",
                 description: "Show the current board",
@@ -62,7 +74,7 @@ impl MiscProcessor {
                 name: "tunables",
                 aliases: &[],
                 category: Category::Tools,
-                cli: true,
+                cli_stage: Some(stage::RUN),
                 during_search: false,
                 usage: "tunables",
                 description: "Print the tunable parameters in tuner format",
@@ -72,7 +84,7 @@ impl MiscProcessor {
                 name: "perft",
                 aliases: &[],
                 category: Category::Tools,
-                cli: true,
+                cli_stage: Some(stage::RUN),
                 during_search: false,
                 usage: "perft [DEPTH]",
                 description: "Count the legal-move tree with bulk counting",
@@ -82,7 +94,7 @@ impl MiscProcessor {
                 name: "perft_no_bulk",
                 aliases: &[],
                 category: Category::Tools,
-                cli: true,
+                cli_stage: Some(stage::RUN),
                 during_search: false,
                 usage: "perft_no_bulk [DEPTH]",
                 description: "Count the legal-move tree without bulk counting",
@@ -92,17 +104,17 @@ impl MiscProcessor {
                 name: "bench",
                 aliases: &[],
                 category: Category::Tools,
-                cli: true,
+                cli_stage: Some(stage::RUN),
                 during_search: false,
-                usage: "bench",
-                description: "Run the benchmark (not implemented yet)",
+                usage: "bench [DEPTH]",
+                description: "Search the benchmark positions to a fixed depth",
                 run: Self::bench,
             },
             Command {
                 name: "clear",
                 aliases: &["cls"],
                 category: Category::Tools,
-                cli: false,
+                cli_stage: None,
                 during_search: false,
                 usage: "clear",
                 description: "Clear the terminal",
@@ -126,7 +138,7 @@ impl MiscProcessor {
     fn perft<C: EngineConfig, const BULK: bool>(shell: &mut Shell<C>, args: &[&str]) {
         let engine = shell.engine();
 
-        let depth = match parse_perft(args) {
+        let depth = match parse_depth(args) {
             Ok(depth) => depth,
             Err(violations) => {
                 print_violations(engine, &violations);
@@ -147,7 +159,32 @@ impl MiscProcessor {
         engine.view().perft_finished(nodes, duration);
     }
 
-    fn bench<C: EngineConfig>(_shell: &mut Shell<C>, _args: &[&str]) {}
+    fn bench<C: EngineConfig>(shell: &mut Shell<C>, args: &[&str])
+    where
+        C::Search: SearchStrategy<C>,
+        C::TimeManager: TimeManagerStrategy<C>,
+        C::BestMove: BestMoveStrategy<C>,
+        C::Node: HasVisits,
+        C::Edge: HasScore + HasVisits + HasPolicy,
+    {
+        let engine = Arc::clone(shell.shared_engine());
+
+        let depth = match parse_depth(args) {
+            Ok(depth) => depth.unwrap_or(DEFAULT_BENCH_DEPTH),
+            Err(violations) => {
+                print_violations(&engine, &violations);
+                return;
+            }
+        };
+
+        let bench = Bench::spawn(engine.fresh_copy(), depth, move |report| {
+            engine
+                .view()
+                .bench_finished(report.nodes(), report.elapsed())
+        });
+
+        shell.start_bench(bench);
+    }
 
     fn clear_terminal_screen<C: EngineConfig>(_shell: &mut Shell<C>, _args: &[&str]) {
         if cfg!(target_os = "windows") {

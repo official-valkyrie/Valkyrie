@@ -38,6 +38,7 @@ use valkyrie_engine::prelude::*;
 
 use crate::{
     commands::{Category, Command, Shell},
+    execution_queue::stage,
     help,
 };
 
@@ -49,7 +50,7 @@ impl GeneralProcessor {
                 name: "help",
                 aliases: &["h"],
                 category: Category::General,
-                cli: true,
+                cli_stage: Some(stage::RUN),
                 during_search: false,
                 usage: "help",
                 description: "Show this help",
@@ -59,7 +60,7 @@ impl GeneralProcessor {
                 name: "version",
                 aliases: &["V"],
                 category: Category::General,
-                cli: true,
+                cli_stage: Some(stage::RUN),
                 during_search: false,
                 usage: "version",
                 description: "Show the engine name and version",

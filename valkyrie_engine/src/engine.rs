@@ -107,6 +107,12 @@ impl<C: EngineConfig> Engine<C> {
         }
     }
 
+    pub fn fresh_copy(&self) -> Self {
+        let mut engine = Self::new(self.params.clone());
+        engine.position = self.position;
+        engine
+    }
+
     #[inline]
     pub fn params(&self) -> &EngineParams<C> {
         &self.params

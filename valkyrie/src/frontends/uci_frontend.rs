@@ -41,6 +41,7 @@ use valkyrie_engine::prelude::*;
 use crate::{
     cli::{Cli, Item},
     commands::{Dispatch, Registry, Shell},
+    execution_queue::{ExecutionQueue, stage},
     input::{Input, Poll},
     interrupt,
 };
@@ -66,47 +67,65 @@ impl<C: EngineConfig> UciFrontend<C> {
         interrupt::install();
         self.shell.engine().view().start();
 
-        let mut ran_command = false;
+        let mut queue = ExecutionQueue::default();
 
         for item in &cli.items {
-            let line = match item {
-                Item::SetOption { name, value } if value.is_empty() => {
-                    format!("setoption name {name}")
-                }
-                Item::SetOption { name, value } => format!("setoption name {name} value {value}"),
-                Item::Command(tokens) => {
-                    ran_command = true;
-                    tokens.join(" ")
-                }
-            };
+            let (stage, line) = self.cli_line(item);
+            queue.push(stage, line);
+        }
 
+        let ran_command = cli
+            .items
+            .iter()
+            .any(|item| matches!(item, Item::Command(_)));
+
+        for line in queue {
             self.input.push_back(line);
         }
 
         self.exit_when_idle = ran_command && !cli.interactive;
         self.run_loop();
-        self.shell.wait_for_search();
+        self.shell.wait_until_idle();
 
         self.shell.engine().view().finish();
     }
 
+    fn cli_line(&self, item: &Item) -> (u16, String) {
+        match item {
+            Item::SetOption { name, value } if value.is_empty() => {
+                (stage::CONFIGURE, format!("setoption name {name}"))
+            }
+            Item::SetOption { name, value } => (
+                stage::CONFIGURE,
+                format!("setoption name {name} value {value}"),
+            ),
+            Item::Command(tokens) => {
+                let stage = tokens
+                    .first()
+                    .and_then(|name| self.shell.registry.find(name))
+                    .and_then(|command| command.cli_stage)
+                    .unwrap_or(stage::RUN);
+
+                (stage, tokens.join(" "))
+            }
+        }
+    }
+
     fn run_loop(&mut self) {
         loop {
-            self.shell.reap_search();
+            self.shell.reap();
 
-            let searching = self.shell.is_searching();
+            let busy = self.shell.is_busy();
 
-            if !searching
-                && (self.shell.shutdown || (self.exit_when_idle && !self.input.has_queued()))
-            {
+            if !busy && (self.shell.shutdown || (self.exit_when_idle && !self.input.has_queued())) {
                 break;
             }
 
-            if searching && interrupt::take_stop_request() {
+            if busy && interrupt::take_stop_request() {
                 self.shell.engine().stop();
             }
 
-            let line = if searching {
+            let line = if busy {
                 match self.input.poll(POLL_INTERVAL) {
                     Poll::Line(line) => line,
                     Poll::Idle => continue,

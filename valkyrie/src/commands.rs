@@ -37,6 +37,7 @@
 use std::{sync::Arc, thread::JoinHandle};
 
 use valkyrie_engine::prelude::*;
+use valkyrie_tools::Bench;
 
 use crate::interrupt;
 
@@ -63,7 +64,7 @@ pub struct Command<C: EngineConfig> {
     pub name: &'static str,
     pub aliases: &'static [&'static str],
     pub category: Category,
-    pub cli: bool,
+    pub cli_stage: Option<u16>,
     pub during_search: bool,
     pub usage: &'static str,
     pub description: &'static str,
@@ -107,6 +108,7 @@ pub struct Shell<C: EngineConfig> {
     pub registry: Registry<C>,
     pub shutdown: bool,
     search: Option<Search>,
+    bench: Option<Bench>,
 }
 
 impl<C: EngineConfig> Shell<C> {
@@ -116,6 +118,7 @@ impl<C: EngineConfig> Shell<C> {
             registry,
             shutdown: false,
             search: None,
+            bench: None,
         }
     }
 
@@ -140,15 +143,19 @@ impl<C: EngineConfig> Shell<C> {
         self.search = Some(Search { handle, infinite });
     }
 
-    pub fn is_searching(&self) -> bool {
-        self.search.is_some()
+    pub fn start_bench(&mut self, bench: Bench) {
+        self.bench = Some(bench);
+    }
+
+    pub fn is_busy(&self) -> bool {
+        self.search.is_some() || self.bench.is_some()
     }
 
     pub fn is_searching_infinitely(&self) -> bool {
         self.search.as_ref().is_some_and(|search| search.infinite)
     }
 
-    pub fn reap_search(&mut self) {
+    pub fn reap(&mut self) {
         if self
             .search
             .as_ref()
@@ -156,12 +163,27 @@ impl<C: EngineConfig> Shell<C> {
         {
             self.wait_for_search();
         }
+
+        if self.bench.as_ref().is_some_and(Bench::is_finished) {
+            self.wait_for_bench();
+        }
     }
 
-    pub fn wait_for_search(&mut self) {
+    pub fn wait_until_idle(&mut self) {
+        self.wait_for_search();
+        self.wait_for_bench();
+    }
+
+    fn wait_for_search(&mut self) {
         if let Some(search) = self.search.take() {
             let _ = search.handle.join();
             interrupt::set_searching(false);
+        }
+    }
+
+    fn wait_for_bench(&mut self) {
+        if let Some(bench) = self.bench.take() {
+            bench.join();
         }
     }
 
@@ -180,7 +202,7 @@ impl<C: EngineConfig> Shell<C> {
             return Dispatch::Unknown;
         };
 
-        if self.is_searching() && !during_search {
+        if self.is_busy() && !during_search {
             return Dispatch::Deferred;
         }
 

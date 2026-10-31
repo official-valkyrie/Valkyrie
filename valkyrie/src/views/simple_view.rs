@@ -132,7 +132,7 @@ impl View for SimpleView {
         let milliseconds = elapsed.as_millis().max(1);
 
         println!(
-            "{nodes} nodes {} nps",
+            "Bench: {nodes} nodes {} nps",
             u128::from(nodes) * 1000 / milliseconds
         );
     }

@@ -3,6 +3,7 @@ members = [
     "valkyrie_chess",
     "valkyrie_engine",
     "valkyrie_telemetry",
+    "valkyrie_tools",
     "valkyrie",
 ]
 resolver = "2"
@@ -22,6 +23,7 @@ homepage = "https://github.com/official-valkyrie/Valkyrie"
 valkyrie_chess = { path = "valkyrie_chess" }
 valkyrie_engine = { path = "valkyrie_engine" }
 valkyrie_telemetry = { path = "valkyrie_telemetry" }
+valkyrie_tools = { path = "valkyrie_tools" }
 
 [profile.release]
 panic = "abort"

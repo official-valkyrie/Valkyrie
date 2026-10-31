@@ -37,6 +37,7 @@
 mod cli;
 mod command_processors;
 mod commands;
+mod execution_queue;
 mod frontends;
 mod help;
 mod input;
@@ -93,7 +94,7 @@ where
     let parsed = cli::parse(&args, &|token| {
         registry
             .find(token)
-            .filter(|command| command.cli)
+            .filter(|command| command.cli_stage.is_some())
             .map(|command| Lookup {
                 name: command.name,
                 primary: command.name == token,
