@@ -91,6 +91,7 @@ pub enum OptionKind {
     Spin,
     Check,
     String,
+    Combo,
     Button,
 }
 
@@ -100,6 +101,7 @@ impl OptionKind {
             Self::Spin => "spin",
             Self::Check => "check",
             Self::String => "string",
+            Self::Combo => "combo",
             Self::Button => "button",
         }
     }
@@ -111,12 +113,14 @@ pub struct OptionSpec {
     pub kind: OptionKind,
     pub default: String,
     pub range: Option<(String, String)>,
+    pub variants: &'static [&'static str],
     pub tunable: bool,
 }
 
 pub trait UciOptionType {
     const KIND: OptionKind;
     const TUNE_KIND: &'static str;
+    const VARIANTS: &'static [&'static str] = &[];
 }
 
 impl UciOptionType for bool {

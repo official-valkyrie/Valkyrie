@@ -34,7 +34,25 @@
     documentation.
 */
 
-use valkyrie_engine::{OptionViolation, StrategyParams};
+use std::cell::RefCell;
+
+use valkyrie_engine::{OptionKind, OptionViolation, StrategyParams};
+
+valkyrie_engine::define_combo! {
+    pub enum Style {
+        Solid,
+        Normal,
+        Risky,
+    }
+}
+
+valkyrie_engine::define_strategy_params! {
+    ComboParams {
+        Options {
+            ["Style"] style: Style => Style::Normal;
+        }
+    }
+}
 
 valkyrie_engine::define_strategy_params! {
     InnerParams {
@@ -150,4 +168,38 @@ fn forwards_options_through_generic_params() {
 
     assert_eq!(params.set_option("InnerOption", "2"), Ok(()));
     assert_eq!(params.inner().inner_option(), 2);
+}
+
+#[test]
+fn combo_options_parse_into_their_enum() {
+    let mut params = ComboParams::new();
+
+    assert_eq!(params.set_option("Style", "risky"), Ok(()));
+    assert_eq!(params.style(), Style::Risky);
+    assert_eq!(
+        params.set_option("Style", "Risky"),
+        Err(OptionViolation::Unchanged {
+            name: "Style".to_string(),
+            value: "Risky".to_string(),
+        })
+    );
+    assert_eq!(
+        params.set_option("Style", "Wild"),
+        Err(OptionViolation::InvalidValue {
+            name: "Style".to_string(),
+            value: "Wild".to_string(),
+        })
+    );
+}
+
+#[test]
+fn combo_options_list_their_variants() {
+    let specs = RefCell::new(Vec::new());
+    ComboParams::new().visit_options(&|spec| specs.borrow_mut().push(spec.clone()));
+    let specs = specs.into_inner();
+
+    assert_eq!(specs.len(), 1);
+    assert_eq!(specs[0].kind, OptionKind::Combo);
+    assert_eq!(specs[0].default, "Normal");
+    assert_eq!(specs[0].variants, ["Solid", "Normal", "Risky"]);
 }

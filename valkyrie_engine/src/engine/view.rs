@@ -79,7 +79,7 @@ pub trait View: std::fmt::Debug + Send + Sync {
 
     fn search_ended(&self, _report: &SearchReport) {}
 
-    fn best_move(&self, _mv: Move, _chess960: bool) {}
+    fn best_move(&self, _mv: Option<Move>, _chess960: bool) {}
 }
 
 #[derive(Debug)]

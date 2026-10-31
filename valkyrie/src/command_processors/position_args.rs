@@ -144,7 +144,7 @@ fn half_moves_after(board: &ChessBoard, mv: Move) -> u8 {
     board.half_moves()
 }
 
-fn find_legal_moves(board: &ChessBoard, mv_str: &str, chess960: bool) -> Vec<Move> {
+pub fn find_legal_moves(board: &ChessBoard, mv_str: &str, chess960: bool) -> Vec<Move> {
     let mut found = Vec::new();
 
     board.map_legal_moves(|mv| {

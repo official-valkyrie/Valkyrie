@@ -96,7 +96,11 @@ where
         if root_node.edge_count() == 0 {
             root_node.set_game_state(engine.position().game_state(engine.position()));
 
-            if !root_node.is_terminal() && self.expand_node(root_node, engine.position()).is_err() {
+            if !root_node.is_terminal()
+                && self
+                    .expand_node(root_node, engine.position(), true)
+                    .is_err()
+            {
                 return;
             }
         }
@@ -171,7 +175,7 @@ where
             let payload = self.simulate_node(&[], current_node, position);
 
             if created && !current_node.is_terminal() {
-                self.expand_node(current_node, position).ok()?;
+                self.expand_node(current_node, position, false).ok()?;
             }
 
             (payload, None)
@@ -198,10 +202,18 @@ where
         Some(backed_up.flipped())
     }
 
-    fn expand_node(&self, node: &C::Node, position: &ChessPosition) -> Result<(), TreeFull> {
+    fn expand_node(
+        &self,
+        node: &C::Node,
+        position: &ChessPosition,
+        is_root: bool,
+    ) -> Result<(), TreeFull> {
+        let limits = self.context.limits();
         let mut policy_distribution = Vec::with_capacity(35);
         position.board().map_legal_moves(|mv| {
-            policy_distribution.push(PolicyEntry::new(mv, 1.0));
+            if !is_root || limits.allows(mv) {
+                policy_distribution.push(PolicyEntry::new(mv, 1.0));
+            }
         });
 
         C::Expansion::execute(

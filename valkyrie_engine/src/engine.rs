@@ -148,6 +148,11 @@ impl<C: EngineConfig> Engine<C> {
         self.position = *position;
     }
 
+    pub fn new_game(&mut self) {
+        self.tree.clear();
+        self.position = ChessPosition::from(ChessBoard::from(&FEN::start_position()));
+    }
+
     #[inline]
     pub fn tree(&self) -> &C::Tree {
         &self.tree
@@ -247,14 +252,12 @@ where
         self.search_state
             .transition(SearchState::Running, SearchState::Ended);
 
-        if let Some(best_move) = best_move {
-            if context.limits().is_infinite() {
-                self.wait_for_interrupt();
-            }
-
-            self.view
-                .best_move(best_move, self.params.general().chess960());
+        if context.limits().is_infinite() {
+            self.wait_for_interrupt();
         }
+
+        self.view
+            .best_move(best_move, self.params.general().chess960());
 
         self.search_state.set(SearchState::Idle);
 
@@ -262,7 +265,7 @@ where
     }
 
     fn choose_move(&self, context: &SearchContext<C>) -> Option<Move> {
-        let Some(first_move) = self.first_legal_move() else {
+        let Some(first_move) = self.first_legal_move(context.limits()) else {
             self.print_error("Illegal position: no legal moves");
             return None;
         };
@@ -280,11 +283,11 @@ where
         Some(self.best_move().unwrap_or(first_move))
     }
 
-    fn first_legal_move(&self) -> Option<Move> {
+    fn first_legal_move(&self, limits: &SearchLimits) -> Option<Move> {
         let mut first_move = None;
 
         self.position.board().map_legal_moves(|mv| {
-            if first_move.is_none() {
+            if first_move.is_none() && limits.allows(mv) {
                 first_move = Some(mv);
             }
         });

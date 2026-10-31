@@ -170,11 +170,12 @@ fn option_rows<'a>(specs: impl Iterator<Item = &'a OptionSpec>) -> Vec<(String, 
     specs
         .map(|spec| {
             let value = match spec.kind {
-                OptionKind::Spin => " <INT>",
-                OptionKind::Check => " <BOOL>",
-                OptionKind::String if spec.range.is_some() => " <NUMBER>",
-                OptionKind::String => " <TEXT>",
-                OptionKind::Button => "",
+                OptionKind::Spin => " <INT>".to_string(),
+                OptionKind::Check => " <BOOL>".to_string(),
+                OptionKind::String if spec.range.is_some() => " <NUMBER>".to_string(),
+                OptionKind::String => " <TEXT>".to_string(),
+                OptionKind::Combo => format!(" <{}>", spec.variants.join("|")),
+                OptionKind::Button => String::new(),
             };
 
             let mut details = match spec.kind {

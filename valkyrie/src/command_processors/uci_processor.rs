@@ -78,6 +78,16 @@ impl UciProcessor {
                 run: Self::is_ready,
             },
             Command {
+                name: "ucinewgame",
+                aliases: &[],
+                category: Category::Uci,
+                cli_stage: None,
+                during_search: false,
+                usage: "ucinewgame",
+                description: "Clear the tree and set the start position",
+                run: Self::new_game,
+            },
+            Command {
                 name: "setoption",
                 aliases: &[],
                 category: Category::Uci,
@@ -104,7 +114,7 @@ impl UciProcessor {
                 cli_stage: Some(stage::RUN),
                 during_search: false,
                 usage: "go [LIMITS...]",
-                description: "Search the current position (wtime btime winc binc movestogo movetime depth nodes infinite)",
+                description: "Search the current position (wtime btime winc binc movestogo movetime depth nodes searchmoves infinite), infinite without limits",
                 run: Self::go,
             },
             Command {
@@ -138,6 +148,10 @@ impl UciProcessor {
 
     fn is_ready<C: EngineConfig>(_shell: &mut Shell<C>, _args: &[&str]) {
         uci_protocol::ready_ok();
+    }
+
+    fn new_game<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
+        shell.engine_mut().new_game();
     }
 
     fn stop<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
@@ -211,7 +225,11 @@ impl UciProcessor {
     {
         let engine = shell.engine();
 
-        let limits = match parse_go(args, engine.position().board().side()) {
+        let limits = match parse_go(
+            args,
+            engine.position().board(),
+            engine.params().general().chess960(),
+        ) {
             Ok(limits) => limits,
             Err(violations) => {
                 print_violations(engine, &violations);

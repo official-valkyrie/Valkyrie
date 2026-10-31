@@ -52,7 +52,7 @@ impl View for MinimalView {
         self.0.search_ended(report)
     }
 
-    fn best_move(&self, mv: Move, chess960: bool) {
+    fn best_move(&self, mv: Option<Move>, chess960: bool) {
         self.0.best_move(mv, chess960)
     }
 }

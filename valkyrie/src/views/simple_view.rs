@@ -170,7 +170,10 @@ impl View for SimpleView {
         Self::print_report(report);
     }
 
-    fn best_move(&self, mv: Move, chess960: bool) {
-        println!("bestmove {}", mv.to_string(chess960))
+    fn best_move(&self, mv: Option<Move>, chess960: bool) {
+        match mv {
+            Some(mv) => println!("bestmove {}", mv.to_string(chess960)),
+            None => println!("bestmove 0000"),
+        }
     }
 }

@@ -168,6 +168,7 @@ macro_rules! __params_visit_options {
                     kind: <$ty as $crate::UciOptionType>::KIND,
                     default: $self_.$field.to_string(),
                     range,
+                    variants: <$ty as $crate::UciOptionType>::VARIANTS,
                     tunable: false,
                 });
             }
@@ -185,6 +186,7 @@ macro_rules! __params_visit_buttons {
                 kind: $crate::OptionKind::Button,
                 default: ::std::string::String::new(),
                 range: None,
+                variants: &[],
                 tunable: false,
             });
         )*
@@ -202,6 +204,7 @@ macro_rules! __params_visit_tunable_options {
                 kind: <$ty as $crate::UciOptionType>::KIND,
                 default: $self_.$field.to_string(),
                 range: Some(($min.to_string(), $max.to_string())),
+                variants: &[],
                 tunable: true,
             });
         )*

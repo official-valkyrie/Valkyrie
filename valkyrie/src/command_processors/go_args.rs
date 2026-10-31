@@ -34,8 +34,10 @@
     documentation.
 */
 
-use valkyrie_chess::Side;
+use valkyrie_chess::{ChessBoard, Side};
 use valkyrie_engine::prelude::*;
+
+use crate::command_processors::position_args::find_legal_moves;
 
 const VALUE_ARGUMENTS: [&str; 8] = [
     "wtime",
@@ -47,11 +49,13 @@ const VALUE_ARGUMENTS: [&str; 8] = [
     "depth",
     "nodes",
 ];
+const FLAG_ARGUMENTS: [&str; 2] = ["infinite", "searchmoves"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GoViolation {
     MissingValue(String),
     InvalidValue { argument: String, value: String },
+    IllegalMove(String),
 }
 
 impl std::fmt::Display for GoViolation {
@@ -61,42 +65,69 @@ impl std::fmt::Display for GoViolation {
             Self::InvalidValue { argument, value } => {
                 write!(f, "Incorrect value '{value}' for {argument}")
             }
+            Self::IllegalMove(mv) => write!(f, "Illegal move: {mv}"),
         }
     }
 }
 
-pub fn parse_go(args: &[&str], side: Side) -> Result<SearchLimits, Vec<GoViolation>> {
+pub fn parse_go(
+    args: &[&str],
+    board: &ChessBoard,
+    chess960: bool,
+) -> Result<SearchLimits, Vec<GoViolation>> {
     let mut limits = SearchLimits::default();
     let mut violations = Vec::new();
+    let mut limited = false;
     let mut idx = 0;
 
     while idx < args.len() {
         let argument = args[idx];
         idx += 1;
 
-        if argument == "infinite" {
-            limits.set_infinite(true);
-            continue;
+        match argument {
+            "infinite" => limits.set_infinite(true),
+            "searchmoves" => {
+                let mut search_moves = Vec::new();
+
+                while let Some(&mv) = args.get(idx).filter(|token| !is_argument(token)) {
+                    idx += 1;
+
+                    let found = find_legal_moves(board, mv, chess960);
+                    if found.is_empty() {
+                        violations.push(GoViolation::IllegalMove(mv.to_string()));
+                    }
+
+                    search_moves.extend(found);
+                }
+
+                limits.set_search_moves(search_moves);
+            }
+            _ if VALUE_ARGUMENTS.contains(&argument) => {
+                limited = true;
+
+                let Some(&value) = args.get(idx).filter(|token| !is_argument(token)) else {
+                    violations.push(GoViolation::MissingValue(argument.to_string()));
+                    continue;
+                };
+
+                idx += 1;
+
+                match value.parse::<i64>() {
+                    Ok(value) => {
+                        apply_limit(&mut limits, argument, value.max(0) as u64, board.side())
+                    }
+                    Err(_) => violations.push(GoViolation::InvalidValue {
+                        argument: argument.to_string(),
+                        value: value.to_string(),
+                    }),
+                }
+            }
+            _ => {}
         }
+    }
 
-        if !VALUE_ARGUMENTS.contains(&argument) {
-            continue;
-        }
-
-        let Some(&value) = args.get(idx).filter(|token| !is_argument(token)) else {
-            violations.push(GoViolation::MissingValue(argument.to_string()));
-            continue;
-        };
-
-        idx += 1;
-
-        match value.parse::<i64>() {
-            Ok(value) => apply_limit(&mut limits, argument, value.max(0) as u64, side),
-            Err(_) => violations.push(GoViolation::InvalidValue {
-                argument: argument.to_string(),
-                value: value.to_string(),
-            }),
-        }
+    if !limited {
+        limits.set_infinite(true);
     }
 
     if violations.is_empty() {
@@ -107,7 +138,7 @@ pub fn parse_go(args: &[&str], side: Side) -> Result<SearchLimits, Vec<GoViolati
 }
 
 fn is_argument(token: &str) -> bool {
-    token == "infinite" || VALUE_ARGUMENTS.contains(&token)
+    FLAG_ARGUMENTS.contains(&token) || VALUE_ARGUMENTS.contains(&token)
 }
 
 fn apply_limit(limits: &mut SearchLimits, argument: &str, value: u64, side: Side) {
@@ -127,9 +158,26 @@ fn apply_limit(limits: &mut SearchLimits, argument: &str, value: u64, side: Side
 #[cfg(test)]
 mod tests {
     use super::*;
+    use valkyrie_chess::FEN;
 
     fn tokens(command: &str) -> Vec<&str> {
         command.split_whitespace().collect()
+    }
+
+    fn board(fen: &str) -> ChessBoard {
+        ChessBoard::from(&FEN::from(fen))
+    }
+
+    fn white() -> ChessBoard {
+        ChessBoard::from(&FEN::start_position())
+    }
+
+    fn black() -> ChessBoard {
+        board("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1")
+    }
+
+    fn parse(command: &str) -> Result<SearchLimits, Vec<GoViolation>> {
+        parse_go(&tokens(command), &white(), false)
     }
 
     #[test]
@@ -137,11 +185,11 @@ mod tests {
         let command =
             "wtime 1000 btime 2000 winc 10 binc 20 movestogo 5 movetime 300 depth 7 nodes 99";
 
-        let white = parse_go(&tokens(command), Side::WHITE).unwrap();
+        let white = parse_go(&tokens(command), &white(), false).unwrap();
         assert_eq!(white.time(), Some(1000));
         assert_eq!(white.increment(), Some(10));
 
-        let black = parse_go(&tokens(command), Side::BLACK).unwrap();
+        let black = parse_go(&tokens(command), &black(), false).unwrap();
         assert_eq!(black.time(), Some(2000));
         assert_eq!(black.increment(), Some(20));
 
@@ -149,25 +197,20 @@ mod tests {
         assert_eq!(white.move_time(), Some(300));
         assert_eq!(white.depth(), Some(7));
         assert_eq!(white.nodes(), Some(99));
+        assert!(!white.is_infinite());
     }
 
     #[test]
-    fn infinite_and_empty_commands_parse() {
-        assert!(
-            parse_go(&tokens("infinite"), Side::WHITE)
-                .unwrap()
-                .is_infinite()
-        );
-
-        let empty = parse_go(&[], Side::WHITE).unwrap();
-        assert!(!empty.is_infinite());
-        assert_eq!(empty.time(), None);
-        assert_eq!(empty.nodes(), None);
+    fn a_go_without_limits_is_infinite() {
+        assert!(parse("infinite").unwrap().is_infinite());
+        assert!(parse("").unwrap().is_infinite());
+        assert!(parse("searchmoves e2e4").unwrap().is_infinite());
+        assert!(!parse("btime 1000").unwrap().is_infinite());
     }
 
     #[test]
     fn negative_values_clamp_to_zero() {
-        let limits = parse_go(&tokens("wtime -500 nodes -1"), Side::WHITE).unwrap();
+        let limits = parse("wtime -500 nodes -1").unwrap();
 
         assert_eq!(limits.time(), Some(0));
         assert_eq!(limits.nodes(), Some(0));
@@ -175,23 +218,48 @@ mod tests {
 
     #[test]
     fn unknown_tokens_are_ignored() {
-        let limits = parse_go(&tokens("ponder searchmoves e2e4 nodes 10"), Side::WHITE).unwrap();
+        assert_eq!(parse("foo nodes 10 bar").unwrap().nodes(), Some(10));
+    }
+
+    #[test]
+    fn search_moves_are_read() {
+        let limits = parse("searchmoves e2e4 g1f3 nodes 10").unwrap();
 
         assert_eq!(limits.nodes(), Some(10));
+        assert_eq!(
+            limits
+                .search_moves()
+                .iter()
+                .map(|mv| mv.to_string(false))
+                .collect::<Vec<_>>(),
+            ["e2e4", "g1f3"]
+        );
+        assert!(limits.allows(limits.search_moves()[0]));
+    }
+
+    #[test]
+    fn illegal_search_moves_are_reported() {
+        assert_eq!(
+            parse("searchmoves e2e4 e2e5 a1a8").unwrap_err(),
+            vec![
+                GoViolation::IllegalMove("e2e5".into()),
+                GoViolation::IllegalMove("a1a8".into()),
+            ]
+        );
     }
 
     #[test]
     fn missing_values_are_reported() {
-        let violations = parse_go(&tokens("nodes"), Side::WHITE).unwrap_err();
+        let violations = parse("nodes").unwrap_err();
         assert_eq!(violations, vec![GoViolation::MissingValue("nodes".into())]);
 
-        let violations = parse_go(&tokens("depth nodes 5"), Side::WHITE).unwrap_err();
+        let violations = parse("depth nodes 5").unwrap_err();
         assert_eq!(violations, vec![GoViolation::MissingValue("depth".into())]);
     }
 
     #[test]
     fn invalid_values_are_reported_together() {
-        let violations = parse_go(&tokens("depth x nodes 1.5 movetime"), Side::WHITE).unwrap_err();
+        let violations = parse("depth x nodes 1.5 movetime").unwrap_err();
 
         assert_eq!(
             violations,

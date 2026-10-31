@@ -34,6 +34,8 @@
     documentation.
 */
 
+use valkyrie_chess::Move;
+
 #[derive(Debug, Clone, Default)]
 pub struct SearchLimits {
     nodes: Option<u64>,
@@ -43,6 +45,7 @@ pub struct SearchLimits {
     increment: Option<u64>,
     moves_to_go: Option<u64>,
     move_time: Option<u64>,
+    search_moves: Vec<Move>,
 }
 
 impl SearchLimits {
@@ -67,6 +70,12 @@ impl SearchLimits {
     pub const fn move_time(&self) -> Option<u64> {
         self.move_time
     }
+    pub fn search_moves(&self) -> &[Move] {
+        &self.search_moves
+    }
+    pub fn allows(&self, mv: Move) -> bool {
+        self.search_moves.is_empty() || self.search_moves.contains(&mv)
+    }
     pub fn set_nodes(&mut self, nodes: Option<u64>) {
         self.nodes = nodes;
     }
@@ -87,5 +96,8 @@ impl SearchLimits {
     }
     pub fn set_move_time(&mut self, move_time: Option<u64>) {
         self.move_time = move_time;
+    }
+    pub fn set_search_moves(&mut self, search_moves: Vec<Move>) {
+        self.search_moves = search_moves;
     }
 }

@@ -34,6 +34,7 @@
     documentation.
 */
 
+mod combo;
 mod compose;
 mod engine_config;
 mod params_common;

@@ -60,6 +60,10 @@ pub fn option(spec: &OptionSpec) {
         line += &format!(" min {min} max {max}");
     }
 
+    for variant in spec.variants {
+        line += &format!(" var {variant}");
+    }
+
     println!("{line}")
 }
 
