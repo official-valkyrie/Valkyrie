@@ -74,14 +74,13 @@ pub trait Tree:
 
     fn new(size_in_mb: usize) -> Self;
 
-    fn resize(&mut self, size_in_mb: usize)
-    where
-        Self: Sized,
-    {
-        *self = Self::new(size_in_mb);
-    }
+    fn resize(&mut self, size_in_mb: usize);
 
     fn clear(&mut self);
+
+    fn reroot(&mut self, _key: NodeKey) {
+        self.clear();
+    }
 
     fn root_index(&self) -> NodeIndex;
 
@@ -95,7 +94,7 @@ pub trait Tree:
 
     fn edges(&self, node: &Self::Node) -> &[EdgeOf<Self>];
 
-    fn edge_index(&self, node: &Self::Node, position: usize) -> EdgeIndex;
+    fn edge_index(&self, node: &Self::Node, slot: usize) -> EdgeIndex;
 
     fn expand(
         &self,
@@ -105,4 +104,10 @@ pub trait Tree:
     ) -> Result<(), TreeFull>;
 
     fn get_or_create_child(&self, edge: EdgeIndex, key: NodeKey) -> Result<Child, TreeFull>;
+
+    #[inline]
+    fn node_entered(&self, _node: NodeIndex) {}
+
+    #[inline]
+    fn node_exited(&self, _node: NodeIndex) {}
 }

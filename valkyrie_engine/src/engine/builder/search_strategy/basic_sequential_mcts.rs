@@ -142,6 +142,22 @@ where
                 .ok()?,
             None => Child::Found(tree.root_index()),
         };
+
+        tree.node_entered(child.index());
+        let result = self.visit_node(edge, child, position);
+        tree.node_exited(child.index());
+
+        result
+    }
+
+    fn visit_node(
+        &mut self,
+        edge: Option<EdgeIndex>,
+        child: Child,
+        position: &mut ChessPosition,
+    ) -> Option<<C::Simulation as SimulationStrategy<C>>::Output> {
+        let engine = self.engine;
+        let tree = engine.tree();
         let created = child.is_created();
         let current_node = &tree[child.index()];
 

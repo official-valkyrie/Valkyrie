@@ -50,7 +50,6 @@ impl Clear for ChildStore {
 
 pub trait HasChild {
     fn child(&self) -> NodeIndex;
-    fn set_child(&self, index: NodeIndex);
 
     #[inline]
     fn has_child(&self) -> bool {
@@ -63,9 +62,9 @@ impl<T: HasComponent<ChildStore>> HasChild for T {
     fn child(&self) -> NodeIndex {
         self.component().0.load()
     }
+}
 
-    #[inline]
-    fn set_child(&self, index: NodeIndex) {
-        self.component().0.store(index);
-    }
+#[inline]
+pub(in crate::engine::tree) fn link_child<E: HasComponent<ChildStore>>(edge: &E, child: NodeIndex) {
+    HasComponent::<ChildStore>::component(edge).0.store(child);
 }

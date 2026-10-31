@@ -39,7 +39,7 @@ use std::ops::Index;
 use crate::engine::tree::{
     Child, EdgeIndex, EdgeOf, NodeIndex, NodeKey, Tree, TreeFull,
     arena::Arena,
-    components::{HasChild, NodeType},
+    components::{HasChild, NodeType, link_child},
 };
 
 const BYTES_PER_MB: usize = 1024 * 1024;
@@ -63,6 +63,12 @@ impl<N: NodeType> Tree for SequentialTree<N> {
         tree
     }
 
+    fn resize(&mut self, size_in_mb: usize) {
+        self.arena = Arena::new(0);
+        self.arena = Arena::new(size_in_mb * BYTES_PER_MB);
+        self.clear();
+    }
+
     fn clear(&mut self) {
         self.arena.reset();
         self.root_idx = self.arena.alloc_node().unwrap_or(NodeIndex::NULL);
@@ -84,8 +90,8 @@ impl<N: NodeType> Tree for SequentialTree<N> {
         self.arena.edges(node.edge_range())
     }
 
-    fn edge_index(&self, node: &N, position: usize) -> EdgeIndex {
-        self.arena.edge_index(node.edge_range(), position)
+    fn edge_index(&self, node: &N, slot: usize) -> EdgeIndex {
+        self.arena.edge_index(node.edge_range(), slot)
     }
 
     fn expand(
@@ -100,7 +106,7 @@ impl<N: NodeType> Tree for SequentialTree<N> {
 
         let range = self.arena.alloc_edges(count).ok_or(TreeFull)?;
         fill(self.arena.edges(range));
-        node.set_edge_range(range);
+        node.edge_range_store().publish(range);
 
         Ok(())
     }
@@ -112,7 +118,7 @@ impl<N: NodeType> Tree for SequentialTree<N> {
         }
 
         let child_idx = self.arena.alloc_node().ok_or(TreeFull)?;
-        edge.set_child(child_idx);
+        link_child(edge, child_idx);
         Ok(Child::Created(child_idx))
     }
 }
@@ -130,5 +136,47 @@ impl<N: NodeType> Index<EdgeIndex> for SequentialTree<N> {
 
     fn index(&self, index: EdgeIndex) -> &N::Edge {
         self.arena.edge(index)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::tree::{edges::AvgScoreEdge, nodes::ClassicNode};
+
+    type TestTree = SequentialTree<ClassicNode<AvgScoreEdge>>;
+
+    #[test]
+    fn a_node_is_expanded_once() {
+        let tree = TestTree::new(1);
+        let root = tree.root_node();
+
+        tree.expand(root, 3, |_| {}).unwrap();
+        tree.expand(root, 5, |_| panic!("expanded twice")).unwrap();
+
+        assert_eq!(root.edge_count(), 3);
+    }
+
+    #[test]
+    fn a_failed_expansion_can_be_retried() {
+        let tree = TestTree::new(1);
+        let root = tree.root_node();
+
+        assert_eq!(tree.expand(root, tree.total_bytes(), |_| {}), Err(TreeFull));
+        assert_eq!(tree.expand(root, 3, |_| {}), Ok(()));
+        assert_eq!(root.edge_count(), 3);
+    }
+
+    #[test]
+    fn a_child_is_created_once() {
+        let tree = TestTree::new(1);
+        tree.expand(tree.root_node(), 1, |_| {}).unwrap();
+        let edge = tree.edge_index(tree.root_node(), 0);
+
+        let created = tree.get_or_create_child(edge, NodeKey::new(0, 0)).unwrap();
+        let found = tree.get_or_create_child(edge, NodeKey::new(0, 0)).unwrap();
+
+        assert_eq!(created, Child::Created(found.index()));
+        assert_eq!(found, Child::Found(tree[edge].child()));
     }
 }

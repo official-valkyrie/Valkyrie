@@ -154,9 +154,9 @@ impl<N: NodeType> Arena<N> {
         unsafe { &*self.edge_ptr(index.raw() + 1) }
     }
 
-    pub fn edge_index(&self, range: EdgeRange, position: usize) -> EdgeIndex {
-        debug_assert!(position < range.count());
-        EdgeIndex::new(range.first() - 1 - position)
+    pub fn edge_index(&self, range: EdgeRange, slot: usize) -> EdgeIndex {
+        debug_assert!(slot < range.count());
+        EdgeIndex::new(range.first() - 1 - slot)
     }
 
     pub fn edges(&self, range: EdgeRange) -> &[N::Edge] {
@@ -203,7 +203,7 @@ mod tests {
 
     use super::*;
     use crate::engine::tree::{
-        components::{HasChild, HasVisits},
+        components::{HasChild, HasVisits, link_child},
         edges::AvgScoreEdge,
         nodes::ClassicNode,
     };
@@ -252,7 +252,7 @@ mod tests {
             arena.node(node).add_visits(node.raw() as u64 + 1);
 
             for (slot, edge) in arena.edges(range).iter().enumerate() {
-                edge.set_child(NodeIndex::new(node.raw() * 10 + slot));
+                link_child(edge, NodeIndex::new(node.raw() * 10 + slot));
             }
 
             blocks.push((node, range));
@@ -276,7 +276,7 @@ mod tests {
         let range = arena.alloc_edges(2).unwrap();
 
         arena.node(node).add_visits(7);
-        arena.edges(range)[0].set_child(NodeIndex::new(3));
+        link_child(&arena.edges(range)[0], NodeIndex::new(3));
         arena.reset();
 
         assert_eq!(arena.used_bytes(), 0);
@@ -309,12 +309,9 @@ mod tests {
         let second = arena.alloc_edges(2).unwrap();
 
         for range in [first, second] {
-            for position in 0..range.count() {
-                let index = arena.edge_index(range, position);
-                assert!(std::ptr::eq(
-                    arena.edge(index),
-                    &arena.edges(range)[position]
-                ));
+            for slot in 0..range.count() {
+                let index = arena.edge_index(range, slot);
+                assert!(std::ptr::eq(arena.edge(index), &arena.edges(range)[slot]));
             }
         }
     }

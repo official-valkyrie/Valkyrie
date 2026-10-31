@@ -76,7 +76,7 @@ use crate::engine::{
     builder::{BestMoveStrategy, TimeManagerStrategy},
     search_state::AtomicSearchState,
     tree::{
-        Tree,
+        NodeKey, Tree,
         components::{HasChild, HasGameState, HasMove, HasPolicy, HasScore, HasVisits},
     },
 };
@@ -215,7 +215,7 @@ where
     C::Edge: HasScore + HasVisits + HasPolicy,
 {
     pub fn search(&mut self, limits: &SearchLimits) -> (Option<Move>, SearchStats) {
-        self.tree.clear();
+        self.tree.reroot(NodeKey::from(&self.position));
         self.search_state.set(SearchState::Running);
         self.run_search(SearchContext::new(limits, self, Self::report))
     }
@@ -224,10 +224,8 @@ where
         self: &mut Arc<Self>,
         limits: SearchLimits,
     ) -> JoinHandle<(Option<Move>, SearchStats)> {
-        Arc::get_mut(self)
-            .expect("a search is already running")
-            .tree
-            .clear();
+        let engine = Arc::get_mut(self).expect("a search is already running");
+        engine.tree.reroot(NodeKey::from(&engine.position));
         self.search_state.set(SearchState::Running);
         let engine = Arc::clone(self);
 

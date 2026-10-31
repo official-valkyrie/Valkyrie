@@ -98,13 +98,8 @@ macro_rules! compose_node {
             type Edge = E;
 
             #[inline]
-            fn edge_range(&self) -> $crate::engine::tree::EdgeRange {
-                self.edges.load()
-            }
-
-            #[inline]
-            fn set_edge_range(&self, range: $crate::engine::tree::EdgeRange) {
-                self.edges.store(range)
+            fn edge_range_store(&self) -> &$crate::engine::tree::EdgeRangeStore {
+                &self.edges
             }
         }
     };

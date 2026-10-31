@@ -34,7 +34,7 @@
     documentation.
 */
 
-use super::EdgeRange;
+use super::{EdgeRange, EdgeRangeStore};
 
 mod child;
 mod draw_chance;
@@ -46,6 +46,7 @@ mod score;
 mod score_sum;
 mod visits;
 
+pub(in crate::engine::tree) use child::link_child;
 pub use child::{ChildStore, HasChild};
 pub use draw_chance::{DrawStore, HasDrawChance};
 pub use game_state::{GameStateStore, HasGameState};
@@ -71,16 +72,34 @@ pub trait Clear {
     fn clear(&self);
 }
 
-pub trait EdgeType: Default + std::fmt::Debug + Send + Sync + 'static + HasMove + HasChild {}
-impl<T: Default + std::fmt::Debug + Send + Sync + 'static + HasMove + HasChild> EdgeType for T {}
+pub trait EdgeType:
+    Default + std::fmt::Debug + Send + Sync + 'static + HasMove + HasChild + HasComponent<ChildStore>
+{
+}
+impl<
+    T: Default
+        + std::fmt::Debug
+        + Send
+        + Sync
+        + 'static
+        + HasMove
+        + HasChild
+        + HasComponent<ChildStore>,
+> EdgeType for T
+{
+}
 
 pub trait NodeType:
     Default + std::fmt::Debug + Send + Sync + 'static + HasGameState + Clear
 {
     type Edge: EdgeType;
 
-    fn edge_range(&self) -> EdgeRange;
-    fn set_edge_range(&self, range: EdgeRange);
+    fn edge_range_store(&self) -> &EdgeRangeStore;
+
+    #[inline]
+    fn edge_range(&self) -> EdgeRange {
+        self.edge_range_store().load()
+    }
 
     #[inline]
     fn edge_count(&self) -> usize {

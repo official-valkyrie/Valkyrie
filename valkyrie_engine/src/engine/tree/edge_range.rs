@@ -93,7 +93,7 @@ impl EdgeRangeStore {
     }
 
     #[inline]
-    pub fn store(&self, range: EdgeRange) {
+    pub(in crate::engine::tree) fn publish(&self, range: EdgeRange) {
         self.0.store(range.pack(), Ordering::Release);
     }
 }
@@ -101,7 +101,7 @@ impl EdgeRangeStore {
 impl Clear for EdgeRangeStore {
     #[inline]
     fn clear(&self) {
-        self.store(EdgeRange::EMPTY);
+        self.publish(EdgeRange::EMPTY);
     }
 }
 
@@ -119,7 +119,7 @@ mod tests {
 
         assert!(last_slot <= EdgeRange::MAX_SLOTS);
 
-        store.store(EdgeRange::new(last_slot, 218));
+        store.publish(EdgeRange::new(last_slot, 218));
 
         assert_eq!(store.load().first(), last_slot);
         assert_eq!(store.load().count(), 218);
