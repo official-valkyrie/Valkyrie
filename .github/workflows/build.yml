@@ -40,7 +40,7 @@ jobs:
             if [ "${{ github.event_name }}" = push ]; then
               release=true
             else
-              echo "::notice::Merging this PR will create release $version"
+              echo "::notice::Merging this PR will create a draft release $version"
             fi
           fi
 
@@ -261,16 +261,22 @@ jobs:
             notes=(--notes-file notes.md)
           fi
 
+          for id in $(gh api "repos/$repo/releases" --paginate \
+            --jq ".[] | select(.draft and .tag_name == \"$VERSION\") | .id"); do
+            gh api -X DELETE "repos/$repo/releases/$id"
+          done
+
           gh release create "$VERSION" dist/*/* \
             --repo "$repo" \
             --target "$sha" \
             --title "Valkyrie v$VERSION" \
-            --latest \
+            --draft \
             "${notes[@]}"
 
-          tag_sha=$(gh api "repos/$repo/git/ref/tags/$VERSION" --jq .object.sha)
-          if [ "$tag_sha" != "$sha" ]; then
-            echo "::error::Tag $VERSION points to $tag_sha, expected $sha"
+          draft_target=$(gh api "repos/$repo/releases" --paginate \
+            --jq ".[] | select(.draft and .tag_name == \"$VERSION\") | .target_commitish")
+          if [ "$draft_target" != "$sha" ]; then
+            echo "::error::Draft $VERSION targets '$draft_target', expected $sha"
             exit 1
           fi
 
