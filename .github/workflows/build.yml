@@ -36,7 +36,7 @@ jobs:
         run: command -v make || choco install make -y --no-progress
 
       - run: |
-          name="valkyrie-preview-$(git log -1 --format=%cd-%h --date=format:%Y%m%d --abbrev=8)"
+          name="valkyrie-prerelease-$(git log -1 --format=%cd-%h --date=format:%Y%m%d --abbrev=8)"
           make release-${{ matrix.target }} EXE="$name" ENGINE_NAME="$name"
 
       - uses: actions/upload-artifact@v4
@@ -131,11 +131,14 @@ jobs:
               echo "::warning::Could not add Bench: $NODES to the PR description"
           fi
 
-  preview:
-    name: preview release
+  prerelease:
+    name: prerelease
     needs: node-count
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    concurrency:
+      group: prerelease
+      cancel-in-progress: true
     permissions:
       contents: write
     env:
@@ -150,7 +153,8 @@ jobs:
 
       - run: |
           name=$(ls dist)
-          gh release create "$name" dist/"$name"/* \
+          gh release delete prerelease --repo "${{ github.repository }}" --cleanup-tag --yes || true
+          gh release create prerelease dist/"$name"/* \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
             --title "$name" \
