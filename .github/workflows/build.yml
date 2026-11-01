@@ -10,8 +10,46 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  meta:
+    name: meta
+    if: github.event.action != 'edited' || github.event.changes.body
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      release: ${{ steps.meta.outputs.release }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - id: meta
+        run: |
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version *= *"\(.*\)"/\1/p' Cargo.toml)
+          if ! [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Cannot read a MAJOR.MINOR.PATCH version from Cargo.toml (got '$version')"
+            exit 1
+          fi
+
+          tags=$(git ls-remote --tags --refs origin | sed 's|.*refs/tags/||' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true)
+          highest=$(printf '%s\n%s\n' "$tags" "$version" | sort -V | tail -n 1)
+          if [ "$highest" != "$version" ]; then
+            echo "::error::Version $version in Cargo.toml is lower than latest release $highest"
+            exit 1
+          fi
+
+          release=false
+          if ! grep -qx "$version" <<< "$tags"; then
+            if [ "${{ github.event_name }}" = push ]; then
+              release=true
+            else
+              echo "::notice::Merging this PR will create release $version"
+            fi
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
   build:
     name: build (${{ matrix.os }}, ${{ matrix.target }})
+    needs: meta
     if: github.event.action != 'edited' || github.event.changes.body
     strategy:
       fail-fast: false
@@ -36,8 +74,12 @@ jobs:
         run: command -v make || choco install make -y --no-progress
 
       - run: |
-          name="valkyrie-prerelease-$(git log -1 --format=%cd-%h --date=format:%Y%m%d --abbrev=8)"
-          make release-${{ matrix.target }} EXE="$name" ENGINE_NAME="$name"
+          if [ "${{ needs.meta.outputs.release }}" = true ]; then
+            make release-${{ matrix.target }}
+          else
+            name="valkyrie-prerelease-$(git log -1 --format=%cd-%h --date=format:%Y%m%d --abbrev=8)"
+            make release-${{ matrix.target }} EXE="$name" ENGINE_NAME="$name"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -133,12 +175,12 @@ jobs:
 
   prerelease:
     name: prerelease
-    needs: node-count
-    if: github.event_name == 'push'
+    needs: [meta, node-count]
+    if: github.event_name == 'push' && needs.meta.outputs.release != 'true'
     runs-on: ubuntu-latest
     concurrency:
-      group: prerelease
-      cancel-in-progress: true
+      group: publish
+      cancel-in-progress: false
     permissions:
       contents: write
     env:
@@ -152,11 +194,89 @@ jobs:
           merge-multiple: true
 
       - run: |
+          repo="${{ github.repository }}"
           name=$(ls dist)
-          gh release delete prerelease --repo "${{ github.repository }}" --cleanup-tag --yes || true
+
+          if gh release view prerelease --repo "$repo" > /dev/null 2>&1; then
+            gh release delete prerelease --repo "$repo" --yes
+          fi
+          if gh api "repos/$repo/git/ref/tags/prerelease" > /dev/null 2>&1; then
+            gh api -X DELETE "repos/$repo/git/refs/tags/prerelease"
+          fi
+
           gh release create prerelease dist/"$name"/* \
-            --repo "${{ github.repository }}" \
+            --repo "$repo" \
             --target "${{ github.sha }}" \
             --title "$name" \
             --notes "Bench: $NODES" \
             --prerelease
+
+          tag_sha=$(gh api "repos/$repo/git/ref/tags/prerelease" --jq .object.sha)
+          if [ "$tag_sha" != "${{ github.sha }}" ]; then
+            echo "::error::prerelease tag points to $tag_sha, expected ${{ github.sha }}"
+            exit 1
+          fi
+
+  release:
+    name: release
+    needs: [meta, node-count]
+    if: github.event_name == 'push' && needs.meta.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: publish
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          path: dist
+          merge-multiple: true
+
+      - run: |
+          repo="${{ github.repository }}"
+          sha="${{ github.sha }}"
+
+          if gh api "repos/$repo/git/ref/tags/$VERSION" > /dev/null 2>&1; then
+            echo "::error::Tag $VERSION already exists"
+            exit 1
+          fi
+
+          : > notes.md
+          pr=$(gh api "repos/$repo/commits/$sha/pulls" --jq '.[0].number // empty')
+          if [ -n "$pr" ]; then
+            gh api "repos/$repo/pulls/$pr" --jq '.body // ""' |
+              tr -d '\r' |
+              { grep -v -E '^Bench: *[0-9]+[[:space:]]*$' || true; } |
+              awk '{ l[NR] = $0 } END { n = NR; while (n > 0 && l[n] ~ /^[[:space:]]*$/) n--; for (i = 1; i <= n; i++) print l[i] }' > notes.md
+          fi
+
+          notes=(--generate-notes)
+          if [ -s notes.md ]; then
+            notes=(--notes-file notes.md)
+          fi
+
+          gh release create "$VERSION" dist/*/* \
+            --repo "$repo" \
+            --target "$sha" \
+            --title "Valkyrie v$VERSION" \
+            --latest \
+            "${notes[@]}"
+
+          tag_sha=$(gh api "repos/$repo/git/ref/tags/$VERSION" --jq .object.sha)
+          if [ "$tag_sha" != "$sha" ]; then
+            echo "::error::Tag $VERSION points to $tag_sha, expected $sha"
+            exit 1
+          fi
+
+          if gh release view prerelease --repo "$repo" > /dev/null 2>&1; then
+            gh release delete prerelease --repo "$repo" --yes
+          fi
+          if gh api "repos/$repo/git/ref/tags/prerelease" > /dev/null 2>&1; then
+            gh api -X DELETE "repos/$repo/git/refs/tags/prerelease"
+          fi
