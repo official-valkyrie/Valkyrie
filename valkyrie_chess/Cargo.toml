@@ -1,0 +1,16 @@
+[package]
+name = "valkyrie_chess"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+name = "valkyrie_chess"
+crate-type = ["lib"]
+
+[dependencies]
+colored = "=2.1.0"

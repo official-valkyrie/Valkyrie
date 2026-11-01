@@ -1,0 +1,22 @@
+[package]
+name = "valkyrie"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "valkyrie"
+path = "src/main.rs"
+
+[dependencies]
+valkyrie_engine = { workspace = true }
+valkyrie_chess = { workspace = true }
+valkyrie_tools = { workspace = true }
+
+[features]
+debug = ["valkyrie_engine/debug"]
+release = ["valkyrie_engine/release"]

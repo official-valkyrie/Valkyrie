@@ -1,0 +1,21 @@
+[package]
+name = "valkyrie_engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+name = "valkyrie_engine"
+crate-type = ["lib"]
+
+[dependencies]
+valkyrie_chess = { workspace = true }
+paste = "1.0"
+
+[features]
+release = []
+debug = []

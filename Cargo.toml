@@ -1,0 +1,33 @@
+[workspace]
+members = [
+    "valkyrie_chess",
+    "valkyrie_engine",
+    "valkyrie_telemetry",
+    "valkyrie_tools",
+    "valkyrie",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+license = "GPL-3.0"
+description = "GPU MCTS chess engine"
+readme = "README.md"
+authors = ["Tomasz Jaworski"]
+repository = "https://github.com/official-valkyrie/Valkyrie"
+homepage = "https://github.com/official-valkyrie/Valkyrie"
+
+[workspace.dependencies]
+valkyrie_chess = { path = "valkyrie_chess" }
+valkyrie_engine = { path = "valkyrie_engine" }
+valkyrie_telemetry = { path = "valkyrie_telemetry" }
+valkyrie_tools = { path = "valkyrie_tools" }
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+strip = true
+opt-level = 3

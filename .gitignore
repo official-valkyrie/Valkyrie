@@ -1,0 +1,13 @@
+/debug
+/target
+/resources
+/data
+/.vs
+
+**/*.rs.bk
+
+*.pdb
+*.exe
+*.bin
+*.pgn
+/releases

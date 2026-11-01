@@ -1,0 +1,303 @@
+/*
+    This file is part of Valkyrie.
+
+    Copyright (C) 2026 Tomasz Jaworski and Valkyrie Contributors
+
+    Valkyrie is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Valkyrie is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Valkyrie.  If not, see <https://gnu.org>.
+
+    Additional terms under GNU GPL version 3 section 7
+
+    1. Linking Exception:
+    If you modify this Program, or any covered work, by linking or
+    combining it with the ONNX Runtime and/or NVIDIA TensorRT libraries
+    (or a modified version of those libraries), containing parts covered
+    by the terms of the respective ONNX Runtime and NVIDIA license
+    agreements, the licensors of this Program grant you additional
+    permission to convey the resulting work.
+
+   2. Attribution Requirement (Section 7b):
+    Under Section 7(b) of the GNU General Public License, version 3,
+    the licensors of this Program require that any modified or redistributed
+    versions of this software must prominently preserve original author
+    attributions and credit to the Valkyrie Contributors in the software
+    documentation.
+*/
+
+use valkyrie_chess::{
+    Bitboard, ChessBoard, ChessPosition, FEN, GameState, Move, MoveFlag, Piece, Side, Square,
+};
+
+#[test]
+fn from_fen() {
+    let board = ChessBoard::from(&FEN::start_position());
+
+    assert_eq!(board.king_square(Side::WHITE), Square::E1);
+    assert_eq!(
+        board
+            .piece_mask_for_side(Piece::PAWN, Side::WHITE)
+            .ls1b_square(),
+        Square::A2
+    );
+    assert_eq!(board.piece_on_square(Square::B1), Piece::KNIGHT);
+
+    assert_eq!(FEN::from(&board), FEN::start_position());
+
+    let board = ChessBoard::from(&FEN::kiwipete_position());
+    assert_eq!(FEN::from(&board), FEN::kiwipete_position());
+
+    let fen = FEN::from("rrkrrrrr/pp3ppp/3pp3/2p5/5P2/P2P4/1PP1P1PP/RRRRKRRR w FBda - 2 1");
+    assert_eq!(FEN::from(&ChessBoard::from(&fen)), fen);
+
+    let fen = FEN::from("brkr2rr/pp3ppp/3ppn2/2p5/5P2/P2P4/NPP1P1PP/BQRBKR1R w HChb - 2 1");
+    assert_eq!(FEN::from(&ChessBoard::from(&fen)), fen);
+
+    let fen = FEN::from("brnr1krr/pp3ppp/3ppn2/2p5/5P2/P2P4/NPP1P1PP/BQ1BRRKR w HEgb - 2 1");
+    assert_eq!(FEN::from(&ChessBoard::from(&fen)), fen);
+}
+
+#[test]
+fn insufficient_material() {
+    let board = ChessBoard::from(&FEN::from("2k5/8/8/8/8/1B6/3K4/8 w - - 0 1"));
+    assert!(board.is_insufficient_material());
+
+    let board = ChessBoard::from(&FEN::from("2k5/8/8/8/8/1B3B2/3K4/8 w - - 0 1"));
+    assert!(board.is_insufficient_material());
+
+    let board = ChessBoard::from(&FEN::from("2k5/8/8/8/8/1B2B3/3K4/8 w - - 0 1"));
+    assert!(!board.is_insufficient_material());
+
+    let board = ChessBoard::from(&FEN::from("2k5/8/8/8/8/1B2N3/3K4/8 w - - 0 1"));
+    assert!(!board.is_insufficient_material());
+
+    let board = ChessBoard::from(&FEN::from("2k5/8/8/8/8/1N2N3/3K4/8 w - - 0 1"));
+    assert!(!board.is_insufficient_material());
+
+    let board = ChessBoard::from(&FEN::from("2k5/8/8/8/8/1N6/3K4/8 w - - 0 1"));
+    assert!(board.is_insufficient_material());
+
+    let board = ChessBoard::from(&FEN::from("2k5/4b3/8/8/8/1B6/3K4/8 w - - 0 1"));
+    assert!(!board.is_insufficient_material());
+
+    let board = ChessBoard::from(&FEN::from("2k5/3b4/8/8/8/1B6/3K4/8 w - - 0 1"));
+    assert!(board.is_insufficient_material());
+}
+
+#[test]
+fn fifty_move_rule() {
+    let board = ChessBoard::from(&FEN::from("7k/8/6K1/8/8/8/8/R7 b - - 99 80"));
+    assert!(!board.is_fifty_move_rule());
+
+    let board = ChessBoard::from(&FEN::from("7k/8/6K1/8/8/8/8/R7 b - - 100 80"));
+    assert!(board.is_fifty_move_rule());
+}
+
+#[test]
+fn draw() {
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from(
+        "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1",
+    )));
+    assert_eq!(position.game_state(&position), GameState::Drew);
+    assert!(position.is_draw(&position));
+
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from(
+        "7k/6Q1/6K1/8/8/8/8/8 b - - 100 80",
+    )));
+    assert_eq!(position.game_state(&position), GameState::Lost(0));
+    assert!(!position.is_draw(&position));
+
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from(
+        "7k/8/6K1/8/8/8/8/R7 b - - 100 80",
+    )));
+    assert_eq!(position.game_state(&position), GameState::Drew);
+
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from(
+        "7k/8/6K1/8/8/8/8/R7 b - - 99 80",
+    )));
+    assert_eq!(position.game_state(&position), GameState::Ongoing);
+
+    let position = ChessPosition::from(ChessBoard::from(&FEN::from(
+        "2k5/8/8/8/8/1B6/3K4/8 w - - 0 1",
+    )));
+    assert!(position.is_draw(&position));
+
+    let knight_shuffle = [
+        (Square::G1, Square::F3),
+        (Square::G8, Square::F6),
+        (Square::F3, Square::G1),
+        (Square::F6, Square::G8),
+    ];
+
+    let root = ChessPosition::from(ChessBoard::from(&FEN::start_position()));
+    let mut position = root;
+    for (from, to) in knight_shuffle.iter().chain(&knight_shuffle[..1]) {
+        position.make_move(Move::from_squares(*from, *to, MoveFlag::QUIET_MOVE));
+    }
+    assert!(position.is_draw(&root));
+    assert!(!position.is_draw(&position));
+
+    for (from, to) in knight_shuffle[1..].iter().chain(&knight_shuffle[..1]) {
+        position.make_move(Move::from_squares(*from, *to, MoveFlag::QUIET_MOVE));
+    }
+    assert!(position.is_draw(&position));
+}
+
+#[test]
+fn make_move() {
+    let mut board = ChessBoard::from(&FEN::from(
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w HAha - 0 1",
+    ));
+    board.make_move(Move::from_squares(
+        Square::E2,
+        Square::E4,
+        MoveFlag::DOUBLE_PUSH,
+    ));
+    assert_eq!(board.en_passant_square(), Square::NULL);
+    assert_eq!(
+        FEN::from(&board),
+        FEN::from("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b HAha - 0 1")
+    );
+
+    let mut board = ChessBoard::from(&FEN::from(
+        "rnbqkbnr/ppp1pppp/8/8/3p4/8/PPPPPPPP/RNBQKBNR w HAha - 0 1",
+    ));
+    board.make_move(Move::from_squares(
+        Square::E2,
+        Square::E4,
+        MoveFlag::DOUBLE_PUSH,
+    ));
+    assert_eq!(board.en_passant_square(), Square::E3);
+    assert_eq!(
+        FEN::from(&board),
+        FEN::from("rnbqkbnr/ppp1pppp/8/8/3pP3/8/PPPP1PPP/RNBQKBNR b HAha e3 0 1")
+    );
+
+    let start = ChessBoard::from(&FEN::from(
+        "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+    ));
+    let loaded = ChessBoard::from(&FEN::from(
+        "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+    ));
+    assert_eq!(loaded.en_passant_square(), Square::NULL);
+    assert_eq!(loaded.hash(), start.hash());
+
+    let mut board = ChessBoard::from(&FEN::from(
+        "5rk1/P4pp1/7p/2pP4/8/8/4PPPP/2RR1K1R w HD c6 0 1",
+    ));
+    board.make_move(Move::from_squares(
+        Square::D5,
+        Square::C6,
+        MoveFlag::EN_PASSANT,
+    ));
+    assert_eq!(
+        FEN::from(&board),
+        FEN::from("5rk1/P4pp1/2P4p/8/8/8/4PPPP/2RR1K1R b HD - 0 1")
+    );
+
+    let mut board = ChessBoard::from(&FEN::from(
+        "5rk1/P4pp1/7p/2pP4/8/8/4PPPP/2RR1K1R w HD c6 0 1",
+    ));
+    board.make_move(Move::from_squares(
+        Square::F1,
+        Square::H1,
+        MoveFlag::KING_SIDE_CASTLE,
+    ));
+    assert_eq!(
+        FEN::from(&board),
+        FEN::from("5rk1/P4pp1/7p/2pP4/8/8/4PPPP/2RR1RK1 b - - 1 1")
+    );
+
+    let mut board = ChessBoard::from(&FEN::from("5rk1/P4pp1/7p/2pP4/8/8/4PPPP/2RR1RK1 w - - 6 1"));
+    board.make_move(Move::from_squares(
+        Square::A7,
+        Square::A8,
+        MoveFlag::ROOK_PROMOTION,
+    ));
+    assert_eq!(
+        FEN::from(&board),
+        FEN::from("R4rk1/5pp1/7p/2pP4/8/8/4PPPP/2RR1RK1 b - - 0 1")
+    );
+
+    let mut board = ChessBoard::from(&FEN::from("5rk1/P4pp1/7p/2pP4/8/8/4PPPP/2RR1RK1 w - - 6 1"));
+    board.make_move(Move::from_squares(
+        Square::C1,
+        Square::A1,
+        MoveFlag::QUIET_MOVE,
+    ));
+    assert_eq!(
+        FEN::from(&board),
+        FEN::from("5rk1/P4pp1/7p/2pP4/8/8/4PPPP/R2R1RK1 b - - 7 1")
+    );
+
+    let mut board = ChessBoard::from(&FEN::from(
+        "5rk1/P4pp1/7p/3P4/2p5/8/4PPPP/R2R1K1R w HD - 0 2",
+    ));
+    board.make_move(Move::from_squares(
+        Square::F1,
+        Square::D1,
+        MoveFlag::QUEEN_SIDE_CASTLE,
+    ));
+    assert_eq!(
+        FEN::from(&board),
+        FEN::from("5rk1/P4pp1/7p/3P4/2p5/8/4PPPP/R1KR3R b - - 1 1")
+    );
+}
+
+#[test]
+fn checkers_mask() {
+    let board = ChessBoard::from(&FEN::from(
+        "k7/3r4/6b1/1b6/1p2P3/3KN1r1/2P5/1b3q2 w - - 0 1",
+    ));
+    assert_eq!(
+        board.generate_checkers_mask(board.side()),
+        Bitboard::from(2251808403619872)
+    );
+
+    let board = ChessBoard::from(&FEN::from("k7/3r4/6b1/8/2p1P3/3KN1r1/2P5/1b3q2 w - - 0 1"));
+    assert_eq!(
+        board.generate_checkers_mask(board.side()),
+        Bitboard::from(2251799880794144)
+    );
+}
+
+#[test]
+fn pin_mask() {
+    let board = ChessBoard::from(&FEN::from(
+        "k7/3r4/6b1/1b6/1p2P3/3KN1r1/2P5/1b3q2 w - - 0 1",
+    ));
+    let (diag, ortho) = board.generate_pin_masks(board.side());
+    assert_eq!(diag, Bitboard::from(70506451567618));
+    assert_eq!(ortho, Bitboard::from(7340032));
+
+    let board = ChessBoard::from(&FEN::from(
+        "k7/3r4/6b1/1b6/2p1P3/3KN1r1/2P5/1b3q2 w - - 0 1",
+    ));
+    let (diag, ortho) = board.generate_pin_masks(board.side());
+    assert_eq!(diag, Bitboard::from(70506451567618));
+    assert_eq!(ortho, Bitboard::from(7340032));
+}
+
+#[test]
+fn attack_mask() {
+    let board = ChessBoard::from(&FEN::from("k7/3r4/6b1/1b6/1p2P3/3K2r1/2P5/1b3q2 w - - 0 1"));
+    let attack_mask = board.generate_attack_map(Side::WHITE);
+    assert_eq!(attack_mask, Bitboard::from(172270427136));
+    let attack_mask = board.generate_attack_map(Side::BLACK);
+    assert_eq!(attack_mask, Bitboard::from(4251237427160514046));
+
+    let board = ChessBoard::from(&FEN::from("k7/3r4/6b1/1b6/2p1P3/3K2r1/2P5/1b3q2 w - - 0 1"));
+    let attack_mask = board.generate_attack_map(Side::WHITE);
+    assert_eq!(attack_mask, Bitboard::from(172270427136));
+    let attack_mask = board.generate_attack_map(Side::BLACK);
+    assert_eq!(attack_mask, Bitboard::from(4251237418570579422));
+}
