@@ -36,3 +36,4 @@
 
 pub mod minimal_view;
 pub mod simple_view;
+pub mod terminal_view;

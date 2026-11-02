@@ -42,14 +42,16 @@ mod frontends;
 mod help;
 mod input;
 mod interrupt;
-mod uci_protocol;
+mod terminal;
+mod tui;
 mod views;
 
 use std::process::ExitCode;
 
-use cli::{Lookup, ViewChoice};
+use cli::{Item, Lookup, ViewChoice};
 use command_processors::print_violations;
 use frontends::uci_frontend::UciFrontend;
+use input::Input;
 use valkyrie_engine::engine::builder::backpropagation_strategy::BasicScalarBackpropagate;
 use valkyrie_engine::engine::builder::best_move_strategy::MaxQ;
 use valkyrie_engine::engine::builder::expansion_strategy::ClassicExpansion;
@@ -61,7 +63,7 @@ use valkyrie_engine::engine::tree::components::{HasPolicy, HasScore, HasVisits};
 use valkyrie_engine::engine::tree::edges::AvgScoreEdge;
 use valkyrie_engine::engine::tree::nodes::ClassicNode;
 use valkyrie_engine::prelude::*;
-use views::{minimal_view::MinimalView, simple_view::SimpleView};
+use views::{minimal_view::MinimalView, simple_view::SimpleView, terminal_view::TerminalView};
 
 const USAGE_ERROR: u8 = 2;
 
@@ -110,12 +112,29 @@ where
         }
     };
 
-    match cli.view {
-        ViewChoice::Simple => engine.set_view(SimpleView::default()),
-        ViewChoice::Minimal => engine.set_view(MinimalView::default()),
-    }
+    let has_commands = cli
+        .items
+        .iter()
+        .any(|item| matches!(item, Item::Command(_)));
 
-    UciFrontend::new(engine, registry).run(&cli);
+    let input = match cli.view {
+        ViewChoice::Auto if !has_commands && terminal::supports_tui() => {
+            let (sender, receiver) = std::sync::mpsc::channel();
+
+            engine.set_view(TerminalView::new(sender, tui::catalog(&engine, &registry)));
+            Input::from_receiver(receiver)
+        }
+        ViewChoice::Minimal => {
+            engine.set_view(MinimalView::default());
+            Input::spawn()
+        }
+        ViewChoice::Auto | ViewChoice::Simple => {
+            engine.set_view(SimpleView::default());
+            Input::spawn()
+        }
+    };
+
+    UciFrontend::new(engine, registry, input).run(&cli);
 
     ExitCode::SUCCESS
 }

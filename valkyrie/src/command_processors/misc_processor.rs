@@ -34,7 +34,7 @@
     documentation.
 */
 
-use std::{process::Command as Process, sync::Arc};
+use std::sync::Arc;
 
 use valkyrie_chess::DEFAULT_PERFT_DEPTH;
 use valkyrie_engine::{
@@ -186,20 +186,7 @@ impl MiscProcessor {
         shell.start_bench(bench);
     }
 
-    fn clear_terminal_screen<C: EngineConfig>(_shell: &mut Shell<C>, _args: &[&str]) {
-        if cfg!(target_os = "windows") {
-            Process::new("cmd")
-                .args(["/c", "cls"])
-                .spawn()
-                .expect("cls command failed to start")
-                .wait()
-                .expect("failed to wait");
-        } else {
-            Process::new("clear")
-                .spawn()
-                .expect("clear command failed to start")
-                .wait()
-                .expect("failed to wait");
-        };
+    fn clear_terminal_screen<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
+        shell.engine().view().clear();
     }
 }

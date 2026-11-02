@@ -44,6 +44,26 @@ use crate::views::simple_view::SimpleView;
 pub struct MinimalView(SimpleView);
 
 impl View for MinimalView {
+    fn clear(&self) {
+        self.0.clear()
+    }
+
+    fn identify(&self, name: &str, author: &str) {
+        self.0.identify(name, author)
+    }
+
+    fn option_listed(&self, spec: &OptionSpec) {
+        self.0.option_listed(spec)
+    }
+
+    fn uci_ok(&self) {
+        self.0.uci_ok()
+    }
+
+    fn ready_ok(&self) {
+        self.0.ready_ok()
+    }
+
     fn bench_finished(&self, nodes: u64, elapsed: Duration) {
         self.0.bench_finished(nodes, elapsed)
     }

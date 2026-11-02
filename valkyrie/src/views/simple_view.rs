@@ -86,6 +86,58 @@ impl View for SimpleView {
         println!("{text}")
     }
 
+    fn clear(&self) {
+        let (program, args): (&str, &[&str]) = if cfg!(target_os = "windows") {
+            ("cmd", &["/c", "cls"])
+        } else {
+            ("clear", &[])
+        };
+
+        let _ = std::process::Command::new(program)
+            .args(args)
+            .spawn()
+            .and_then(|mut child| child.wait());
+    }
+
+    fn identify(&self, name: &str, author: &str) {
+        println!("id name {name}");
+        println!("id author {author}");
+    }
+
+    fn option_listed(&self, spec: &OptionSpec) {
+        let mut line = format!("option name {} type {}", spec.name, spec.kind.uci_name());
+
+        if spec.kind != OptionKind::Button {
+            let default = if spec.default.is_empty() {
+                "<empty>"
+            } else {
+                &spec.default
+            };
+
+            line += &format!(" default {default}");
+        }
+
+        if let Some((min, max)) = &spec.range
+            && (spec.kind == OptionKind::Spin || spec.tunable)
+        {
+            line += &format!(" min {min} max {max}");
+        }
+
+        for variant in spec.variants {
+            line += &format!(" var {variant}");
+        }
+
+        println!("{line}")
+    }
+
+    fn uci_ok(&self) {
+        println!("uciok")
+    }
+
+    fn ready_ok(&self) {
+        println!("readyok")
+    }
+
     fn board(&self, board: &ChessBoard) {
         println!("{board}")
     }

@@ -38,7 +38,10 @@ use std::time::Duration;
 
 use valkyrie_chess::{ChessBoard, Move};
 
-use crate::engine::{SearchLimits, SearchReport, SearchStats};
+use crate::{
+    OptionSpec,
+    engine::{SearchLimits, SearchReport, SearchStats},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageLevel {
@@ -53,9 +56,21 @@ pub trait View: std::fmt::Debug + Send + Sync {
 
     fn message(&self, _level: MessageLevel, _text: &str) {}
 
+    fn clear(&self) {}
+
+    fn identify(&self, _name: &str, _author: &str) {}
+
+    fn option_listed(&self, _spec: &OptionSpec) {}
+
+    fn uci_ok(&self) {}
+
+    fn ready_ok(&self) {}
+
     fn board(&self, _board: &ChessBoard) {}
 
     fn position_changed(&self, _board: &ChessBoard) {}
+
+    fn new_game(&self, _board: &ChessBoard) {}
 
     fn option_changed(&self, _name: &str, _value: &str) {}
 

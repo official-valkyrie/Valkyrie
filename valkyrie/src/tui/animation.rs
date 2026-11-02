@@ -34,43 +34,56 @@
     documentation.
 */
 
-use valkyrie_engine::prelude::*;
+use std::time::Duration;
 
-pub fn identify(name: &str, author: &str) {
-    println!("id name {name}");
-    println!("id author {author}");
+use crate::tui::canvas::{Canvas, Rect};
+
+pub const DURATION: Duration = Duration::from_millis(400);
+
+const ROW_DELAY: f32 = 0.05;
+const ROW_SPREAD: f32 = 0.55;
+const ROW_SPAN: f32 = 0.35;
+const PIECES_END: f32 = 0.95;
+const BOARD_DELAY: f32 = 0.5;
+
+pub fn smooth(amount: f32) -> f32 {
+    let amount = amount.clamp(0.0, 1.0);
+
+    amount * amount * (3.0 - 2.0 * amount)
 }
 
-pub fn option(spec: &OptionSpec) {
-    let mut line = format!("option name {} type {}", spec.name, spec.kind.uci_name());
-
-    if spec.kind != OptionKind::Button {
-        let default = if spec.default.is_empty() {
-            "<empty>"
-        } else {
-            &spec.default
-        };
-
-        line += &format!(" default {default}");
-    }
-
-    if let Some((min, max)) = &spec.range
-        && (spec.kind == OptionKind::Spin || spec.tunable)
-    {
-        line += &format!(" min {min} max {max}");
-    }
-
-    for variant in spec.variants {
-        line += &format!(" var {variant}");
-    }
-
-    println!("{line}")
+pub fn row_start(y: usize, height: usize) -> f32 {
+    ROW_DELAY + ROW_SPREAD * y as f32 / height.max(1) as f32
 }
 
-pub fn uci_ok() {
-    println!("uciok")
+pub fn board_start(y: usize, height: usize) -> f32 {
+    row_start(y, height) + ROW_SPAN * BOARD_DELAY
 }
 
-pub fn ready_ok() {
-    println!("readyok")
+pub fn pieces_placed(progress: f32, start: f32, total: usize) -> usize {
+    if progress < start {
+        return 0;
+    }
+
+    let placed = (progress - start) / (PIECES_END - start).max(f32::EPSILON);
+
+    ((placed * total as f32).floor() as usize).min(total)
+}
+
+pub fn reveal_rows(canvas: &mut Canvas, progress: f32, keep: &[Rect]) {
+    let height = canvas.height();
+
+    for y in 0..height {
+        let amount = smooth((progress - row_start(y, height)) / ROW_SPAN);
+
+        if amount >= 1.0 {
+            continue;
+        }
+
+        for x in 0..canvas.width() {
+            if !keep.iter().any(|area| area.contains((x, y))) {
+                canvas.fade(x, y, amount);
+            }
+        }
+    }
 }
