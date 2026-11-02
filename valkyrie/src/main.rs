@@ -93,6 +93,10 @@ where
     let registry = command_processors::registry::<C>();
     let args: Vec<String> = std::env::args().skip(1).collect();
 
+    if args.is_empty() && terminal::relaunch_in_terminal() {
+        return ExitCode::SUCCESS;
+    }
+
     let parsed = cli::parse(&args, &|token| {
         registry
             .find(token)

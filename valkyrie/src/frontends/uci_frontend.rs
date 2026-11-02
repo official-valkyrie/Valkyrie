@@ -122,7 +122,7 @@ impl<C: EngineConfig> UciFrontend<C> {
             }
 
             if busy && interrupt::take_stop_request() {
-                self.shell.engine().stop();
+                self.shell.stop();
             }
 
             let line = if busy {

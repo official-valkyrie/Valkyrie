@@ -52,6 +52,8 @@ use crate::{
         animation,
         canvas::Canvas,
         completion::{Catalog, suggest},
+        graphics::Protocol,
+        large_board::SquareImage,
         palette::BACKGROUND,
         screens::{self, Frame},
         state::{State, lock},
@@ -144,9 +146,9 @@ impl Drop for Renderer {
 fn run(state: &Mutex<State>, catalog: &Catalog, stop: &AtomicBool) {
     let mut canvas = Canvas::new(0, 0);
     let mut shown = Vec::new();
+    let mut shown_pieces: Vec<SquareImage> = Vec::new();
     let mut settling_until = Instant::now();
     let mut last_full = Instant::now();
-    let opened = Instant::now();
 
     while !stop.load(Ordering::SeqCst) && ACTIVE.load(Ordering::SeqCst) {
         let started = Instant::now();
@@ -158,49 +160,77 @@ fn run(state: &Mutex<State>, catalog: &Catalog, stop: &AtomicBool) {
             settling_until = started + RESIZE_SETTLE;
         }
 
-        let full = resized || started < settling_until || started - last_full >= FULL_REPAINT;
+        canvas.clear();
+        let (pieces, protocol) = compose(&mut canvas, state, catalog);
+
+        let left: Vec<&SquareImage> = shown_pieces
+            .iter()
+            .filter(|shown| !pieces.iter().any(|piece| piece.same_place(shown)))
+            .collect();
+        let board = pieces.first().map(|piece| piece.board);
+        let removed = left.iter().any(|shown| Some(shown.board) != board);
+        let full =
+            resized || removed || started < settling_until || started - last_full >= FULL_REPAINT;
 
         if full {
             shown.clear();
             last_full = started;
         }
 
-        canvas.clear();
-        let elapsed = opened.elapsed().as_secs_f32() / animation::DURATION.as_secs_f32();
-
-        compose(
-            &mut canvas,
-            state,
-            catalog,
-            (elapsed < 1.0).then_some(elapsed),
-        );
-
         let changes = canvas.diff(&mut shown);
-        let clear = if resized { CLEAR } else { "" };
+        let clear = if resized || removed { CLEAR } else { "" };
+        let mut pictures = String::new();
 
-        if !changes.is_empty() && ACTIVE.load(Ordering::SeqCst) {
-            terminal::write_unlocked(&format!("{FRAME_BEGIN}{clear}{changes}{PARK}{FRAME_END}"));
+        if let Some(protocol) = protocol {
+            if removed {
+                pictures.push_str(&protocol.clear());
+            } else {
+                for shown in &left {
+                    pictures.push_str(&protocol.erase(shown));
+                }
+            }
+
+            for piece in pieces
+                .iter()
+                .filter(|piece| full || !shown_pieces.contains(piece))
+            {
+                pictures.push_str(&protocol.encode(piece));
+            }
         }
 
+        if (!changes.is_empty() || !pictures.is_empty()) && ACTIVE.load(Ordering::SeqCst) {
+            terminal::write_unlocked(&format!(
+                "{FRAME_BEGIN}{clear}{changes}{pictures}{PARK}{FRAME_END}"
+            ));
+        }
+
+        shown_pieces = pieces;
         thread::sleep(FRAME_TIME.saturating_sub(started.elapsed()));
     }
 
     restore();
 }
 
-fn compose(canvas: &mut Canvas, state: &Mutex<State>, catalog: &Catalog, progress: Option<f32>) {
+fn compose(
+    canvas: &mut Canvas,
+    state: &Mutex<State>,
+    catalog: &Catalog,
+) -> (Vec<SquareImage>, Option<Protocol>) {
     let mut state = lock(state);
     let suggestions = suggest(catalog, &state.editor.before_cursor());
+    let intro = *state.intro.get_or_insert_with(Instant::now);
+    let progress = intro.elapsed().as_secs_f32() / animation::duration(state.screen).as_secs_f32();
 
-    let regions = screens::draw(
+    let (regions, pieces) = screens::draw(
         canvas,
         &Frame {
             state: &state,
             catalog,
             suggestions: &suggestions,
-            progress,
+            progress: (intro.elapsed() < animation::length(state.screen)).then_some(progress),
         },
     );
 
     state.regions = regions;
+    (pieces, state.graphics)
 }

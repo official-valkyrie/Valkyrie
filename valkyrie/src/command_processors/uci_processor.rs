@@ -162,7 +162,7 @@ impl UciProcessor {
     }
 
     fn stop<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
-        shell.engine().stop();
+        shell.stop();
     }
 
     fn quit<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {

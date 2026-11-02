@@ -34,7 +34,7 @@
     documentation.
 */
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Rgb(pub u8, pub u8, pub u8);
 
 impl Rgb {
@@ -73,3 +73,4 @@ pub const ERROR: Rgb = Rgb(222, 108, 96);
 
 pub const LIGHT_SQUARE: Rgb = Rgb(56, 76, 114);
 pub const DARK_SQUARE: Rgb = Rgb(32, 46, 76);
+pub const PIECE_OUTLINE: Rgb = Rgb(10, 13, 20);

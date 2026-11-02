@@ -41,7 +41,7 @@ use std::{
         mpsc::Sender,
     },
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crossterm::event::{
@@ -55,11 +55,13 @@ use crate::{
     tui::{
         completion::Catalog,
         editor::Outcome,
-        state::{Edit, State, Target, Tone, lock},
+        state::{Copied, Edit, PerftRun, Screen, State, Target, Tone, lock},
     },
 };
 
 const POLL_INTERVAL: Duration = Duration::from_millis(40);
+const STOP_GRACE: Duration = Duration::from_millis(500);
+const STOP_COMMAND: &str = "stop";
 
 #[derive(Debug)]
 pub struct Events {
@@ -135,7 +137,7 @@ fn key_pressed(state: &Mutex<State>, catalog: &Catalog, sender: &Sender<String>,
     let control = key.modifiers.contains(KeyModifiers::CONTROL);
 
     if control && matches!(key.code, KeyCode::Char('c' | 'C')) {
-        interrupt::ctrl_c();
+        ctrl_c(state, sender);
         return;
     }
 
@@ -144,6 +146,15 @@ fn key_pressed(state: &Mutex<State>, catalog: &Catalog, sender: &Sender<String>,
     if state.help_open {
         state.help_open = false;
         return;
+    }
+
+    if state.screen == Screen::Perft {
+        if !state.perft.as_ref().is_some_and(PerftRun::done) {
+            return;
+        }
+
+        state.screen = Screen::Welcome;
+        state.intro = Some(Instant::now());
     }
 
     if let Some(edit) = state.editing.as_mut() {
@@ -271,16 +282,40 @@ fn activate(state: &mut State, catalog: &Catalog, sender: &Sender<String>, name:
     }
 }
 
-fn copy(state: &mut State, label: &str, text: &str) {
+fn copy(state: &mut State, original: &str, text: &str) {
     if terminal::copy_to_clipboard(text) {
-        let mut letters = label.chars();
+        let mut letters = original.chars();
         let label: String = letters
             .next()
             .map(|first| first.to_uppercase().chain(letters).collect())
             .unwrap_or_default();
 
-        state.respond(Tone::Result, &format!("{label} copied to clipboard"));
+        state.copied = Some(Copied {
+            label: original.to_string(),
+            message: format!("{label} copied to clipboard"),
+            at: Instant::now(),
+        });
     } else {
         state.respond(Tone::Error, "Could not access the clipboard");
     }
+}
+
+fn ctrl_c(state: &Mutex<State>, sender: &Sender<String>) {
+    let mut state = lock(state);
+
+    if state.busy {
+        state.stopped_at = Some(Instant::now());
+        let _ = sender.send(STOP_COMMAND.to_string());
+        return;
+    }
+
+    if state
+        .stopped_at
+        .is_some_and(|stopped| stopped.elapsed() < STOP_GRACE)
+    {
+        return;
+    }
+
+    drop(state);
+    interrupt::ctrl_c();
 }

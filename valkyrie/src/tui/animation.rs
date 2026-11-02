@@ -34,17 +34,61 @@
     documentation.
 */
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use crate::tui::canvas::{Canvas, Rect};
+use crate::tui::{
+    canvas::{Canvas, Rect},
+    state::Screen,
+};
 
-pub const DURATION: Duration = Duration::from_millis(400);
+pub const PIECE_STEPS: u8 = 6;
+
+const WELCOME_DURATION: Duration = Duration::from_millis(400);
+const PERFT_DURATION: Duration = Duration::from_millis(1000);
+const BOARD_DURATION: Duration = Duration::from_millis(1000);
 
 const ROW_DELAY: f32 = 0.05;
 const ROW_SPREAD: f32 = 0.55;
 const ROW_SPAN: f32 = 0.35;
-const PIECES_END: f32 = 0.95;
-const BOARD_DELAY: f32 = 0.5;
+const BOARD_FADE: f32 = 0.1;
+const PIECE_FADE: f32 = 0.3;
+const PIECE_DELAY: f32 = 0.014;
+
+#[derive(Debug, Clone, Copy)]
+pub struct BoardClock {
+    elapsed: f32,
+    start: f32,
+}
+
+impl BoardClock {
+    pub fn new(screen: Screen, progress: f32, y: usize, height: usize) -> Self {
+        let length = duration(screen).as_secs_f32();
+
+        Self {
+            elapsed: progress * length,
+            start: row_start(y, height) * length,
+        }
+    }
+
+    pub fn placing(since: Instant) -> Option<Self> {
+        let elapsed = since.elapsed();
+
+        (elapsed < BOARD_DURATION).then(|| Self {
+            elapsed: elapsed.as_secs_f32(),
+            start: -BOARD_FADE,
+        })
+    }
+
+    pub fn board(self) -> f32 {
+        smooth((self.elapsed - self.start) / BOARD_FADE)
+    }
+
+    pub fn piece(self, slot: usize) -> f32 {
+        let begin = self.start + BOARD_FADE + PIECE_DELAY * slot as f32;
+
+        smooth((self.elapsed - begin) / PIECE_FADE)
+    }
+}
 
 pub fn smooth(amount: f32) -> f32 {
     let amount = amount.clamp(0.0, 1.0);
@@ -52,22 +96,8 @@ pub fn smooth(amount: f32) -> f32 {
     amount * amount * (3.0 - 2.0 * amount)
 }
 
-pub fn row_start(y: usize, height: usize) -> f32 {
+fn row_start(y: usize, height: usize) -> f32 {
     ROW_DELAY + ROW_SPREAD * y as f32 / height.max(1) as f32
-}
-
-pub fn board_start(y: usize, height: usize) -> f32 {
-    row_start(y, height) + ROW_SPAN * BOARD_DELAY
-}
-
-pub fn pieces_placed(progress: f32, start: f32, total: usize) -> usize {
-    if progress < start {
-        return 0;
-    }
-
-    let placed = (progress - start) / (PIECES_END - start).max(f32::EPSILON);
-
-    ((placed * total as f32).floor() as usize).min(total)
 }
 
 pub fn reveal_rows(canvas: &mut Canvas, progress: f32, keep: &[Rect]) {
@@ -86,4 +116,15 @@ pub fn reveal_rows(canvas: &mut Canvas, progress: f32, keep: &[Rect]) {
             }
         }
     }
+}
+
+pub const fn duration(screen: Screen) -> Duration {
+    match screen {
+        Screen::Welcome => WELCOME_DURATION,
+        Screen::Perft => PERFT_DURATION,
+    }
+}
+
+pub fn length(screen: Screen) -> Duration {
+    duration(screen).max(BOARD_DURATION)
 }

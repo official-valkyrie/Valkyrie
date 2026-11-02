@@ -35,12 +35,17 @@
 */
 
 pub mod animation;
+pub mod arrow;
+pub mod blocks;
 pub mod canvas;
 pub mod completion;
 pub mod editor;
 pub mod events;
+pub mod graphics;
+pub mod large_board;
 pub mod logo;
 pub mod palette;
+pub mod perft;
 pub mod renderer;
 pub mod screens;
 pub mod state;

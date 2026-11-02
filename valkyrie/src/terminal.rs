@@ -52,12 +52,43 @@ pub fn write_unlocked(text: &str) {
     platform::write_unlocked(text);
 }
 
+pub fn relaunch_in_terminal() -> bool {
+    platform::relaunch_in_terminal()
+}
+
+pub fn pseudo_console() -> bool {
+    platform::pseudo_console()
+}
+
 pub fn copy_to_clipboard(text: &str) -> bool {
     platform::copy_to_clipboard(text)
 }
 
+pub fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    bytes
+        .chunks(3)
+        .flat_map(|chunk| {
+            let value = chunk.iter().enumerate().fold(0u32, |value, (index, byte)| {
+                value | (u32::from(*byte) << (16 - 8 * index))
+            });
+
+            (0..4).map(move |index| {
+                if index <= chunk.len() {
+                    char::from(ALPHABET[((value >> (18 - 6 * index)) & 63) as usize])
+                } else {
+                    '='
+                }
+            })
+        })
+        .collect()
+}
+
 #[cfg(windows)]
 mod platform {
+    use std::io::IsTerminal;
+
     const STD_OUTPUT_HANDLE: u32 = -11i32 as u32;
     const ENABLE_VIRTUAL_TERMINAL_PROCESSING: u32 = 0x0004;
     const INVALID_HANDLE_VALUE: isize = -1;
@@ -115,6 +146,7 @@ mod platform {
         fn EmptyClipboard() -> i32;
         fn SetClipboardData(format: u32, memory: isize) -> isize;
         fn CloseClipboard() -> i32;
+        fn GetClassNameW(window: isize, name: *mut u16, length: i32) -> i32;
     }
 
     unsafe extern "system" {
@@ -122,9 +154,64 @@ mod platform {
         fn GlobalLock(memory: isize) -> *mut u16;
         fn GlobalUnlock(memory: isize) -> i32;
         fn GlobalFree(memory: isize) -> isize;
+        fn GetConsoleWindow() -> isize;
+        fn GetConsoleProcessList(processes: *mut u32, count: u32) -> u32;
     }
 
     const CF_UNICODETEXT: u32 = 13;
+    const PSEUDO_CONSOLE_CLASS: &str = "PseudoConsoleWindow";
+    const LEGACY_CONSOLE_CLASS: &str = "ConsoleWindowClass";
+    const WINDOWS_TERMINAL: &str = "wt.exe";
+    const CLASS_NAME_LENGTH: usize = 64;
+
+    pub fn pseudo_console() -> bool {
+        console_class().is_some_and(|class| class == PSEUDO_CONSOLE_CLASS)
+    }
+
+    pub fn relaunch_in_terminal() -> bool {
+        let mut processes = [0u32; 2];
+        let attached = unsafe { GetConsoleProcessList(processes.as_mut_ptr(), 2) };
+
+        let interactive = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
+
+        if !interactive
+            || attached != 1
+            || console_class().is_none_or(|class| class != LEGACY_CONSOLE_CLASS)
+        {
+            return false;
+        }
+
+        let Ok(executable) = std::env::current_exe() else {
+            return false;
+        };
+        let directory = std::env::current_dir().unwrap_or_default();
+
+        std::process::Command::new(WINDOWS_TERMINAL)
+            .arg("-d")
+            .arg(directory)
+            .arg(executable)
+            .spawn()
+            .is_ok()
+    }
+
+    fn console_class() -> Option<String> {
+        let mut name = [0u16; CLASS_NAME_LENGTH];
+
+        let length = unsafe {
+            let window = GetConsoleWindow();
+
+            if window == 0 {
+                return None;
+            }
+
+            GetClassNameW(window, name.as_mut_ptr(), CLASS_NAME_LENGTH as i32)
+        };
+
+        let length = usize::try_from(length).ok().filter(|length| *length > 0)?;
+
+        Some(String::from_utf16_lossy(&name[..length]))
+    }
+
     const GMEM_MOVEABLE: u32 = 0x0002;
     const CONSOLE_CHUNK: usize = 8192;
 
@@ -279,31 +366,17 @@ mod platform {
         true
     }
 
-    pub fn copy_to_clipboard(text: &str) -> bool {
-        write_unlocked(&format!("\x1b]52;c;{}\x07", base64(text.as_bytes())));
-        true
+    pub fn relaunch_in_terminal() -> bool {
+        false
     }
 
-    fn base64(bytes: &[u8]) -> String {
-        const ALPHABET: &[u8; 64] =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    pub fn pseudo_console() -> bool {
+        false
+    }
 
-        bytes
-            .chunks(3)
-            .flat_map(|chunk| {
-                let value = chunk.iter().enumerate().fold(0u32, |value, (index, byte)| {
-                    value | (u32::from(*byte) << (16 - 8 * index))
-                });
-
-                (0..4).map(move |index| {
-                    if index <= chunk.len() {
-                        char::from(ALPHABET[((value >> (18 - 6 * index)) & 63) as usize])
-                    } else {
-                        '='
-                    }
-                })
-            })
-            .collect()
+    pub fn copy_to_clipboard(text: &str) -> bool {
+        write_unlocked(&format!("\x1b]52;c;{}\x07", super::base64(text.as_bytes())));
+        true
     }
 
     pub fn size() -> Option<(u16, u16)> {
@@ -327,6 +400,14 @@ mod platform {
     }
 
     pub fn write_unlocked(_text: &str) {}
+
+    pub fn relaunch_in_terminal() -> bool {
+        false
+    }
+
+    pub fn pseudo_console() -> bool {
+        false
+    }
 
     pub fn copy_to_clipboard(_text: &str) -> bool {
         false

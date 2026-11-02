@@ -55,7 +55,7 @@ const UNSEEN: Cell = Cell {
     style: PLAIN,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
     pub x: usize,
     pub y: usize,

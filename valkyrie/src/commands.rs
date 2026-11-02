@@ -34,7 +34,13 @@
     documentation.
 */
 
-use std::{sync::Arc, thread::JoinHandle};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread::JoinHandle,
+};
 
 use valkyrie_engine::prelude::*;
 use valkyrie_tools::Bench;
@@ -102,6 +108,11 @@ pub enum Dispatch {
     Unknown,
 }
 
+struct Perft {
+    handle: JoinHandle<()>,
+    stop: Arc<AtomicBool>,
+}
+
 struct Search {
     handle: JoinHandle<(Option<Move>, SearchStats)>,
     infinite: bool,
@@ -113,6 +124,7 @@ pub struct Shell<C: EngineConfig> {
     pub shutdown: bool,
     search: Option<Search>,
     bench: Option<Bench>,
+    perft: Option<Perft>,
 }
 
 impl<C: EngineConfig> Shell<C> {
@@ -123,6 +135,7 @@ impl<C: EngineConfig> Shell<C> {
             shutdown: false,
             search: None,
             bench: None,
+            perft: None,
         }
     }
 
@@ -151,8 +164,21 @@ impl<C: EngineConfig> Shell<C> {
         self.bench = Some(bench);
     }
 
+    pub fn start_perft(&mut self, handle: JoinHandle<()>, stop: Arc<AtomicBool>) {
+        interrupt::set_searching(true);
+        self.perft = Some(Perft { handle, stop });
+    }
+
+    pub fn stop(&self) {
+        self.engine.stop();
+
+        if let Some(perft) = &self.perft {
+            perft.stop.store(true, Ordering::Relaxed);
+        }
+    }
+
     pub fn is_busy(&self) -> bool {
-        self.search.is_some() || self.bench.is_some()
+        self.search.is_some() || self.bench.is_some() || self.perft.is_some()
     }
 
     pub fn is_searching_infinitely(&self) -> bool {
@@ -171,11 +197,20 @@ impl<C: EngineConfig> Shell<C> {
         if self.bench.as_ref().is_some_and(Bench::is_finished) {
             self.wait_for_bench();
         }
+
+        if self
+            .perft
+            .as_ref()
+            .is_some_and(|perft| perft.handle.is_finished())
+        {
+            self.wait_for_perft();
+        }
     }
 
     pub fn wait_until_idle(&mut self) {
         self.wait_for_search();
         self.wait_for_bench();
+        self.wait_for_perft();
     }
 
     fn wait_for_search(&mut self) {
@@ -188,6 +223,13 @@ impl<C: EngineConfig> Shell<C> {
     fn wait_for_bench(&mut self) {
         if let Some(bench) = self.bench.take() {
             bench.join();
+        }
+    }
+
+    fn wait_for_perft(&mut self) {
+        if let Some(perft) = self.perft.take() {
+            let _ = perft.handle.join();
+            interrupt::set_searching(false);
         }
     }
 

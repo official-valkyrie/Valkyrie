@@ -82,6 +82,8 @@ pub trait View: std::fmt::Debug + Send + Sync {
 
     fn perft_finished(&self, _nodes: u64, _elapsed: Duration) {}
 
+    fn perft_stopped(&self, _nodes: u64, _elapsed: Duration) {}
+
     fn bench_finished(&self, _nodes: u64, _elapsed: Duration) {}
 
     fn search_started(&self, _limits: &SearchLimits) {}

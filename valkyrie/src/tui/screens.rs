@@ -36,30 +36,39 @@
 
 use crate::tui::{
     animation,
-    canvas::{Canvas, Rect, fit},
+    blocks::{self, Block, BoardSize, Placement},
+    canvas::{Canvas, Rect},
     completion::{Catalog, Suggestions},
+    large_board::{self, SquareImage},
     logo::Logo,
-    palette::{GOLD, STEEL},
-    state::{Region, State, Target},
-    theme::{ACCENT, DIM, Style},
-    widgets::{self, BOARD_ROWS, BOARD_WIDTH, FEN_LABEL, FEN_LABEL_WIDTH, INPUT_HEIGHT},
+    palette::{GOLD_LIGHT, Rgb},
+    perft,
+    state::{PerftRun, Region, Screen, State},
+    theme::ACCENT,
+    widgets::{self, DETAIL_ROWS, FEN_LABEL_WIDTH, INPUT_HEIGHT},
 };
 
 const MIN_WIDTH: usize = 44;
 const MIN_HEIGHT: usize = 12;
 const MARGIN: usize = 2;
+const FOOTER_INSET: usize = 1;
 const LOGO_GAP: usize = 5;
 const PANEL_MIN_WIDTH: usize = 38;
 const PANEL_MAX_WIDTH: usize = 46;
 const SOLO_PANEL_WIDTH: usize = 60;
 const SECTION_GAP: usize = 1;
-const VERSION_GAP: usize = 3;
 const TITLE_GAP: usize = 2;
 const FEN_GAP: usize = 1;
 const RESPONSE_ROWS: usize = 1;
 const BOARD_GAP: usize = 4;
 const DETAILS_MIN_WIDTH: usize = 18;
-const TITLE: &str = "V A L K Y R I E";
+const PERFT_TOP: usize = 1;
+const PERFT_MAX_WIDTH: usize = 116;
+const PERFT_COLUMN_GAP: usize = 5;
+const SPLITS_MIN_WIDTH: usize = 42;
+const PERFT_ARROW_COLOR: Rgb = GOLD_LIGHT;
+const PERFT_ARROW_WIDTH: f32 = 0.16;
+const PERFT_ARROW_OPACITY: f32 = 0.8;
 
 pub struct Frame<'a> {
     pub state: &'a State,
@@ -68,7 +77,19 @@ pub struct Frame<'a> {
     pub progress: Option<f32>,
 }
 
-pub fn draw(canvas: &mut Canvas, frame: &Frame<'_>) -> Vec<Region> {
+impl Frame<'_> {
+    pub fn images(&self) -> bool {
+        self.state.graphics.is_some() && !self.state.help_open
+    }
+
+    fn fen_rows(&self, width: usize) -> usize {
+        self.state.position.as_ref().map_or(0, |position| {
+            widgets::fen_lines(position, width.saturating_sub(FEN_LABEL_WIDTH)).len()
+        })
+    }
+}
+
+pub fn draw(canvas: &mut Canvas, frame: &Frame<'_>) -> (Vec<Region>, Vec<SquareImage>) {
     let (width, height) = (canvas.width(), canvas.height());
     let mut regions = Vec::new();
 
@@ -80,174 +101,250 @@ pub fn draw(canvas: &mut Canvas, frame: &Frame<'_>) -> Vec<Region> {
             message,
             ACCENT,
         );
-        return regions;
+        return (regions, Vec::new());
     }
 
-    let content_height = height - INPUT_HEIGHT - RESPONSE_ROWS - 1;
-    let available = width - MARGIN * 2;
-    let logo = Logo::get();
-    let panel_width = available
-        .saturating_sub(logo.width + LOGO_GAP)
-        .min(PANEL_MAX_WIDTH);
-    let mut animated = Vec::new();
+    let body = Rect::new(MARGIN, 0, width - MARGIN * 2, height - 1);
+    let mut placements = match frame.state.screen {
+        Screen::Welcome => welcome(body, frame),
+        Screen::Perft => perft(body, frame),
+    };
 
-    if panel_width >= PANEL_MIN_WIDTH && content_height >= logo.height {
-        let x = MARGIN + (available - logo.width - LOGO_GAP - panel_width) / 2;
-        let y = (content_height - logo.height) / 2;
+    placements.push(Placement::new(
+        Block::Footer,
+        Rect::new(
+            body.x + FOOTER_INSET,
+            body.bottom(),
+            body.width - FOOTER_INSET * 2,
+            1,
+        ),
+    ));
 
-        logo.draw(canvas, x, y, frame.progress);
-        animated.push(Rect::new(x, y, logo.width, logo.height));
-        animated.extend(panel(
-            canvas,
-            frame,
-            Rect::new(x + logo.width + LOGO_GAP, y, panel_width, logo.height),
-            &mut regions,
-        ));
-    } else {
-        let panel_width = available.min(SOLO_PANEL_WIDTH);
-
-        animated.extend(panel(
-            canvas,
-            frame,
-            Rect::new(
-                MARGIN + (available - panel_width) / 2,
-                0,
-                panel_width,
-                content_height,
-            ),
-            &mut regions,
-        ));
+    for placement in &placements {
+        blocks::draw(canvas, *placement, frame, &mut regions);
     }
 
-    let input = Rect::new(
-        MARGIN,
-        content_height + RESPONSE_ROWS,
-        width - MARGIN * 2,
-        INPUT_HEIGHT,
-    );
-
-    widgets::response(
-        canvas,
-        input.x + 1,
-        content_height,
-        input.width - 2,
-        frame.state,
-    );
-    widgets::input(canvas, input, frame.state, frame.suggestions);
-    widgets::footer(
-        canvas,
-        Rect::new(input.x + 1, height - 1, input.width - 2, 1),
-        frame.catalog,
-        frame.state,
-        frame.suggestions,
-        &mut regions,
-    );
-    widgets::suggestions(canvas, input, frame.state, frame.suggestions, &mut regions);
+    if let Some(input) = placements
+        .iter()
+        .find(|placement| placement.block == Block::Input)
+    {
+        widgets::suggestions(
+            canvas,
+            input.area,
+            frame.state,
+            frame.suggestions,
+            &mut regions,
+        );
+    }
 
     if frame.state.help_open {
         widgets::help(canvas, frame.catalog);
     }
 
     if let Some(progress) = frame.progress {
+        let animated: Vec<Rect> = placements
+            .iter()
+            .filter(|placement| placement.block.animates_itself())
+            .map(|placement| placement.area)
+            .collect();
+
         animation::reveal_rows(canvas, progress, &animated);
     }
 
-    regions
+    let pieces = placements
+        .iter()
+        .find_map(|placement| match placement.block {
+            Block::Board(size) if frame.images() => {
+                Some(board_images(placement.area, size, frame, height))
+            }
+            _ => None,
+        })
+        .unwrap_or_default();
+
+    (regions, pieces)
 }
 
-fn panel(
-    canvas: &mut Canvas,
-    frame: &Frame<'_>,
-    area: Rect,
-    regions: &mut Vec<Region>,
-) -> Option<Rect> {
+fn board_images(area: Rect, size: BoardSize, frame: &Frame<'_>, height: usize) -> Vec<SquareImage> {
+    let Some(position) = &frame.state.position else {
+        return Vec::new();
+    };
+
+    let clock = blocks::board_clock(area, frame, height);
+    let opacity = |slot: usize| {
+        let fade = clock.map_or(1.0, |clock| clock.piece(slot));
+        (fade * f32::from(animation::PIECE_STEPS)).round() as u8
+    };
+    let arrow = clock
+        .is_none()
+        .then(|| frame.state.perft.as_ref().and_then(PerftRun::current))
+        .flatten()
+        .map(|arrow| {
+            arrow
+                .color(PERFT_ARROW_COLOR)
+                .width(PERFT_ARROW_WIDTH)
+                .opacity(PERFT_ARROW_OPACITY)
+        });
+
+    large_board::images(
+        area,
+        size.label_width(),
+        size.square(),
+        position,
+        opacity,
+        arrow,
+    )
+}
+
+fn perft(body: Rect, frame: &Frame<'_>) -> Vec<Placement> {
+    let span = body.width.min(PERFT_MAX_WIDTH);
+    let x = body.x + (body.width - span) / 2;
+    let header = body.y + PERFT_TOP;
+    let main = header + 1 + TITLE_GAP;
+    let large = frame.state.graphics.is_some()
+        && main + BoardSize::Large.rows() <= body.bottom()
+        && span >= BoardSize::Large.width() + PERFT_COLUMN_GAP + SPLITS_MIN_WIDTH;
+    let size = if large {
+        BoardSize::Large
+    } else {
+        BoardSize::Small
+    };
+
+    let right = x + size.width() + PERFT_COLUMN_GAP;
+    let right_width = span - size.width() - PERFT_COLUMN_GAP;
+    let summary = body
+        .bottom()
+        .saturating_sub(SECTION_GAP + perft::SUMMARY_ROWS);
+    let splits = summary.saturating_sub(SECTION_GAP + main).max(2);
+
+    let mut placements = vec![
+        Placement::new(Block::PerftHeader, Rect::new(x, header, span, 1)),
+        Placement::new(
+            Block::Board(size),
+            Rect::new(x, main, size.width(), size.rows()),
+        ),
+        Placement::new(Block::Splits, Rect::new(right, main, right_width, splits)),
+        Placement::new(
+            Block::Summary,
+            Rect::new(right, summary, right_width, perft::SUMMARY_ROWS),
+        ),
+    ];
+
+    let fen_y = main + size.rows() + FEN_GAP;
+    let fen = frame.fen_rows(size.width());
+
+    if fen > 0 && fen_y + fen < body.bottom() {
+        placements.push(Placement::new(
+            Block::Fen,
+            Rect::new(x, fen_y, size.width(), fen),
+        ));
+    }
+
+    placements
+}
+
+fn welcome(body: Rect, frame: &Frame<'_>) -> Vec<Placement> {
+    let content_height = body.height - INPUT_HEIGHT - RESPONSE_ROWS;
+    let logo = Logo::get();
+    let panel_width = body
+        .width
+        .saturating_sub(logo.width + LOGO_GAP)
+        .min(PANEL_MAX_WIDTH);
+    let mut placements = Vec::new();
+
+    if panel_width >= PANEL_MIN_WIDTH && content_height >= logo.height {
+        let x = body.x + (body.width - logo.width - LOGO_GAP - panel_width) / 2;
+        let y = body.y + (content_height - logo.height) / 2;
+
+        placements.push(Placement::new(
+            Block::Logo,
+            Rect::new(x, y, logo.width, logo.height),
+        ));
+        panel(
+            &mut placements,
+            frame,
+            Rect::new(x + logo.width + LOGO_GAP, y, panel_width, logo.height),
+        );
+    } else {
+        let panel_width = body.width.min(SOLO_PANEL_WIDTH);
+
+        panel(
+            &mut placements,
+            frame,
+            Rect::new(
+                body.x + (body.width - panel_width) / 2,
+                body.y,
+                panel_width,
+                content_height,
+            ),
+        );
+    }
+
+    let input = Rect::new(
+        body.x,
+        body.y + content_height + RESPONSE_ROWS,
+        body.width,
+        INPUT_HEIGHT,
+    );
+
+    placements.extend([
+        Placement::new(
+            Block::Response,
+            Rect::new(
+                input.x + FOOTER_INSET,
+                body.y + content_height,
+                input.width - FOOTER_INSET * 2,
+                RESPONSE_ROWS,
+            ),
+        ),
+        Placement::new(Block::Input, input),
+    ]);
+
+    placements
+}
+
+fn panel(placements: &mut Vec<Placement>, frame: &Frame<'_>, area: Rect) {
     let (x, width) = (area.x, area.width);
-    let position = frame.state.position.as_ref();
-    let fen = position.map_or(Vec::new(), |position| {
-        widgets::fen_lines(position, width.saturating_sub(FEN_LABEL_WIDTH))
-    });
+    let size = BoardSize::Small;
+    let fen_rows = frame.fen_rows(width);
     let settings = widgets::visible_options(frame.catalog).count();
 
     let title_rows = 1 + TITLE_GAP;
-    let board_rows = |fen_rows: usize| BOARD_ROWS + FEN_GAP + fen_rows + SECTION_GAP;
+    let board_rows = |fen_rows: usize| size.rows() + FEN_GAP + fen_rows + SECTION_GAP;
     let total = |board: Option<usize>| title_rows + board.map_or(0, board_rows) + 1 + settings;
 
-    let board = position.map(|_| fen.len());
+    let board = frame.state.position.as_ref().map(|_| fen_rows);
     let board = [board, board.map(|_| 1), None]
         .into_iter()
         .find(|board| total(*board) <= area.height)
         .flatten();
 
     let mut y = area.y + area.height.saturating_sub(total(board)) / 2;
-    let end = canvas.put(x, y, TITLE, Style::new(GOLD).bold());
-    let version = version(&frame.catalog.engine_name);
-    let room = (x + width).saturating_sub(end + VERSION_GAP);
 
-    if room > 0 {
-        let area = widgets::copyable(
-            canvas,
-            end + VERSION_GAP,
-            y,
-            &[fit(version, room)],
-            DIM,
-            frame.state,
-        );
-        regions.push(Region {
-            area,
-            target: Target::Copy {
-                label: "version",
-                text: version.to_string(),
-            },
-        });
-    }
-
+    placements.push(Placement::new(Block::Title, Rect::new(x, y, width, 1)));
     y += title_rows;
 
-    let mut board_area = None;
+    if let Some(fen_rows) = board {
+        placements.push(Placement::new(
+            Block::Board(size),
+            Rect::new(x, y, size.width(), size.rows()),
+        ));
 
-    if let (Some(fen_rows), Some(position)) = (board, position) {
-        let start = animation::board_start(y, canvas.height());
-        let pieces = frame.progress.map_or(usize::MAX, |progress| {
-            animation::pieces_placed(progress, start, position.piece_count())
-        });
-
-        if frame.progress.is_none_or(|progress| progress >= start) {
-            widgets::board(canvas, x, y, position, pieces);
+        if width >= size.width() + BOARD_GAP + DETAILS_MIN_WIDTH {
+            placements.push(Placement::new(
+                Block::Details,
+                Rect::new(
+                    x + size.width() + BOARD_GAP,
+                    y,
+                    width - size.width() - BOARD_GAP,
+                    DETAIL_ROWS,
+                ),
+            ));
         }
 
-        board_area = Some(Rect::new(x, y, BOARD_WIDTH, BOARD_ROWS));
-
-        if width >= BOARD_WIDTH + BOARD_GAP + DETAILS_MIN_WIDTH {
-            widgets::position_details(
-                canvas,
-                x + BOARD_WIDTH + BOARD_GAP,
-                y,
-                width - BOARD_WIDTH - BOARD_GAP,
-                position,
-            );
-        }
-
-        let lines = if fen_rows == fen.len() {
-            fen.clone()
-        } else {
-            vec![fit(&position.fen, width.saturating_sub(FEN_LABEL_WIDTH))]
-        };
-        canvas.put(x, y + BOARD_ROWS + FEN_GAP, FEN_LABEL, Style::new(STEEL));
-        let area = widgets::copyable(
-            canvas,
-            x + FEN_LABEL_WIDTH,
-            y + BOARD_ROWS + FEN_GAP,
-            &lines,
-            DIM,
-            frame.state,
-        );
-        regions.push(Region {
-            area,
-            target: Target::Copy {
-                label: "FEN",
-                text: position.fen.clone(),
-            },
-        });
+        placements.push(Placement::new(
+            Block::Fen,
+            Rect::new(x, y + size.rows() + FEN_GAP, width, fen_rows),
+        ));
 
         y += board_rows(fen_rows);
     }
@@ -255,23 +352,9 @@ fn panel(
     let rows = settings.min(area.bottom().saturating_sub(y + 1));
 
     if rows > 0 {
-        widgets::heading(canvas, x, y, width, "Settings");
-        widgets::settings(
-            canvas,
-            Rect::new(x, y + 1, width, rows),
-            frame.catalog,
-            frame.state,
-            regions,
-        );
+        placements.push(Placement::new(
+            Block::Settings,
+            Rect::new(x, y, width, rows + 1),
+        ));
     }
-
-    board_area
-}
-
-fn version(engine_name: &str) -> &str {
-    engine_name
-        .strip_prefix("Valkyrie")
-        .map(|rest| rest.trim_start_matches(['-', ' ']))
-        .filter(|rest| !rest.is_empty())
-        .unwrap_or(engine_name)
 }

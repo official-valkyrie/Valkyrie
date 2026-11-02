@@ -34,6 +34,8 @@
     documentation.
 */
 
+use std::time::Duration;
+
 use valkyrie_engine::prelude::{OptionKind, OptionSpec};
 
 use crate::tui::{
@@ -43,22 +45,24 @@ use crate::tui::{
         BACKGROUND, DARK_SQUARE, ERROR, GOLD, GOLD_LIGHT, HOVER, LIGHT_SQUARE, MUTED, NAVY, RULE,
         Rgb, STEEL, SURFACE, TEXT, WHITE,
     },
-    state::{Edit, Position, Region, State, Target, Tone},
+    state::{Edit, Position, Region, Screen, State, Target, Tone},
     theme::{ACCENT, DIM, FAILURE, PLAIN, Style},
 };
 
 pub const INPUT_HEIGHT: usize = 3;
-pub const BOARD_WIDTH: usize = BOARD_LABEL_WIDTH + SQUARE_WIDTH * 8;
+pub const BOARD_WIDTH: usize = BOARD_LABEL_WIDTH + BOARD_SQUARE_WIDTH * 8;
 pub const BOARD_ROWS: usize = 9;
+pub const DETAIL_ROWS: usize = 5;
 pub const FEN_LABEL_WIDTH: usize = FEN_LABEL.len();
 
 pub const FEN_LABEL: &str = "FEN: ";
 
-const BOARD_LABEL_WIDTH: usize = 2;
-const SQUARE_WIDTH: usize = 2;
+pub const BOARD_LABEL_WIDTH: usize = 2;
+pub const BOARD_SQUARE_WIDTH: usize = 2;
 const DETAIL_LABEL_WIDTH: usize = 12;
 const FILES: [char; 8] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 const PIECE_GLYPHS: [char; 6] = ['♙', '♞', '♝', '♜', '♛', '♚'];
+const APPEARANCE: [usize; 6] = [5, 3, 2, 4, 1, 0];
 
 const PROMPT: &str = "› ";
 const PLACEHOLDER: &str = "Type a command, or ? for help";
@@ -77,6 +81,7 @@ const IDLE_CHIPS: [(&str, &str); 3] = [("Enter", "run"), ("Tab", "complete"), ("
 const QUIT_LABEL: &str = "Quit";
 const STOP_LABEL: &str = "Stop";
 const CHIP_GAP: usize = 3;
+const COPY_NOTICE: Duration = Duration::from_secs(2);
 const QUIT_KEY: &str = "ctrl+c";
 const EDIT_MIN_WIDTH: usize = 8;
 
@@ -312,6 +317,20 @@ pub fn footer(
         *x = canvas.put(*x, area.y, &fit(value, limit.saturating_sub(*x)), style);
     };
 
+    if let Some(copied) = state
+        .copied
+        .as_ref()
+        .filter(|copied| copied.at.elapsed() < COPY_NOTICE)
+    {
+        text(
+            canvas,
+            &mut x,
+            &copied.message,
+            Style::new(GOLD_LIGHT).bold(),
+        );
+        return;
+    }
+
     if let Some(edit) = &state.editing {
         for (key, label) in [("Enter", "apply"), ("Esc", "cancel")] {
             x = chip_within(canvas, x, area.y, key, label, limit);
@@ -360,6 +379,13 @@ pub fn footer(
             };
             text(canvas, &mut x, action, Style::new(STEEL));
         }
+        None if state.screen == Screen::Perft => match &state.perft {
+            Some(run) if run.done() => {
+                x = chip_within(canvas, x, area.y, "any key", "back to the console", limit);
+                text(canvas, &mut x, "Hover the results to copy them", DIM);
+            }
+            _ => text(canvas, &mut x, "Counting legal moves…", DIM),
+        },
         None => match suggestions.usage {
             Some(usage) => {
                 text(canvas, &mut x, "usage  ", DIM);
@@ -702,20 +728,46 @@ fn wrap_words(text: &str, width: usize) -> Vec<String> {
     lines.into_iter().map(|line| fit(&line, width)).collect()
 }
 
-pub fn board(canvas: &mut Canvas, x: usize, y: usize, position: &Position, pieces: usize) {
+pub fn placement_order(position: &Position) -> [[usize; 8]; 8] {
     let flipped = position.black_to_move();
     let orient = |index: usize| if flipped { 7 - index } else { index };
+    let distance = |index: usize| (2 * index).abs_diff(7).pow(2);
+    let mut squares: Vec<_> = (0..8)
+        .flat_map(|shown_row| (0..8).map(move |shown_file| (shown_row, shown_file)))
+        .filter_map(|(shown_row, shown_file)| {
+            position.squares[orient(shown_row)][orient(shown_file)].map(|piece| {
+                (
+                    APPEARANCE[piece.piece],
+                    !piece.white,
+                    distance(shown_row) + distance(shown_file),
+                    shown_file,
+                    7 - shown_row,
+                )
+            })
+        })
+        .collect();
     let mut order = [[usize::MAX; 8]; 8];
-    let mut next = 0;
 
-    for (shown_row, slots) in order.iter_mut().enumerate().rev() {
-        for (shown_file, slot) in slots.iter_mut().enumerate() {
-            if position.squares[orient(shown_row)][orient(shown_file)].is_some() {
-                *slot = next;
-                next += 1;
-            }
-        }
+    squares.sort_unstable();
+
+    for (slot, (.., shown_file, from_bottom)) in squares.into_iter().enumerate() {
+        order[7 - from_bottom][shown_file] = slot;
     }
+
+    order
+}
+
+pub fn board(
+    canvas: &mut Canvas,
+    x: usize,
+    y: usize,
+    position: &Position,
+    fade: f32,
+    glyphs: Option<&dyn Fn(usize) -> f32>,
+) {
+    let flipped = position.black_to_move();
+    let orient = |index: usize| if flipped { 7 - index } else { index };
+    let order = placement_order(position);
 
     for (shown_row, slots) in order.iter().enumerate() {
         let row = orient(shown_row);
@@ -729,14 +781,13 @@ pub fn board(canvas: &mut Canvas, x: usize, y: usize, position: &Position, piece
             } else {
                 DARK_SQUARE
             };
-            let column = x + BOARD_LABEL_WIDTH + shown_file * SQUARE_WIDTH;
-            let visible = *slot < pieces;
-            let (glyph, piece) = match position.squares[row][file].filter(|_| visible) {
-                Some(placed) => (
+            let column = x + BOARD_LABEL_WIDTH + shown_file * BOARD_SQUARE_WIDTH;
+            let (glyph, piece) = match (position.squares[row][file], glyphs) {
+                (Some(placed), Some(opacity)) => (
                     PIECE_GLYPHS[placed.piece],
-                    if placed.white { WHITE } else { GOLD },
+                    square.lerp(if placed.white { WHITE } else { GOLD }, opacity(*slot)),
                 ),
-                None => (' ', TEXT),
+                _ => (' ', TEXT),
             };
 
             canvas.set(column, y + shown_row, glyph, Style::new(piece).on(square));
@@ -744,11 +795,19 @@ pub fn board(canvas: &mut Canvas, x: usize, y: usize, position: &Position, piece
         }
 
         canvas.set(
-            x + BOARD_LABEL_WIDTH + shown_row * SQUARE_WIDTH,
+            x + BOARD_LABEL_WIDTH + shown_row * BOARD_SQUARE_WIDTH,
             y + 8,
             FILES[orient(shown_row)],
             DIM,
         );
+    }
+
+    if fade < 1.0 {
+        for row in y..y + BOARD_ROWS {
+            for column in x..x + BOARD_WIDTH {
+                canvas.fade(column, row, fade);
+            }
+        }
     }
 }
 

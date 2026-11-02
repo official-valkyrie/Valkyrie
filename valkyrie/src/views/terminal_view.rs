@@ -36,7 +36,7 @@
 
 use std::{
     sync::{Arc, Mutex, mpsc::Sender},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use valkyrie_chess::{ChessBoard, FEN};
@@ -45,8 +45,10 @@ use valkyrie_engine::prelude::*;
 use crate::tui::{
     completion::Catalog,
     events::Events,
+    graphics::Protocol,
+    perft,
     renderer::Renderer,
-    state::{Position, State, Tone, lock},
+    state::{PerftOutcome, PerftRun, Position, Screen, State, Tone, lock},
 };
 
 #[derive(Debug)]
@@ -68,6 +70,7 @@ impl TerminalView {
         Self {
             state: Arc::new(Mutex::new(State {
                 position: Some(Position::new(&ChessBoard::from(&FEN::start_position()))),
+                graphics: Protocol::detect(),
                 ..State::default()
             })),
             catalog: Arc::new(catalog),
@@ -78,6 +81,30 @@ impl TerminalView {
 
     fn update(&self, change: impl FnOnce(&mut State)) {
         change(&mut lock(&self.state));
+    }
+
+    fn finish_perft(&self, nodes: u64, elapsed: Duration, stopped: bool) {
+        self.update(|state| {
+            state.busy = false;
+
+            let Some(run) = &mut state.perft else {
+                return;
+            };
+
+            run.outcome = Some(PerftOutcome {
+                nodes,
+                elapsed,
+                stopped,
+            });
+
+            let summary = format!("Perft {}: {} nodes", run.depth, perft::group(nodes));
+
+            if stopped {
+                state.respond(Tone::Error, &format!("{summary} before it was stopped"));
+            } else {
+                state.respond(Tone::Result, &summary);
+            }
+        })
     }
 
     fn respond(&self, tone: Tone, text: &str) {
@@ -145,14 +172,14 @@ impl View for TerminalView {
 
     fn position_changed(&self, board: &ChessBoard) {
         self.update(|state| {
-            state.position = Some(Position::new(board));
+            state.place(Position::new(board));
             state.respond(Tone::Info, "Position set");
         })
     }
 
     fn new_game(&self, board: &ChessBoard) {
         self.update(|state| {
-            state.position = Some(Position::new(board));
+            state.place(Position::new(board));
             state.respond(Tone::Info, "New game");
         })
     }
@@ -168,16 +195,31 @@ impl View for TerminalView {
         self.respond(Tone::Info, &format!("{name} triggered"))
     }
 
-    fn perft_finished(&self, nodes: u64, elapsed: Duration) {
-        let milliseconds = elapsed.as_millis().max(1);
+    fn perft_started(&self, board: &ChessBoard, depth: u8, bulk: bool) {
+        self.update(|state| {
+            state.position = Some(Position::new(board));
+            state.perft = Some(PerftRun::new(depth, bulk, board));
+            state.screen = Screen::Perft;
+            state.intro = Some(Instant::now());
+            state.busy = true;
+            state.editing = None;
+        })
+    }
 
-        self.respond(
-            Tone::Result,
-            &format!(
-                "Perft {nodes} nodes · {milliseconds} ms · {} nps",
-                u128::from(nodes) * 1000 / milliseconds
-            ),
-        )
+    fn perft_move(&self, mv: Move, nodes: u64, chess960: bool) {
+        self.update(|state| {
+            if let Some(run) = &mut state.perft {
+                run.splits.push((mv.to_string(chess960), nodes));
+            }
+        })
+    }
+
+    fn perft_finished(&self, nodes: u64, elapsed: Duration) {
+        self.finish_perft(nodes, elapsed, false)
+    }
+
+    fn perft_stopped(&self, nodes: u64, elapsed: Duration) {
+        self.finish_perft(nodes, elapsed, true)
     }
 
     fn bench_finished(&self, nodes: u64, elapsed: Duration) {

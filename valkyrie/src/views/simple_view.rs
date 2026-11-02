@@ -180,6 +180,15 @@ impl View for SimpleView {
         println!("{PERFT_SEPARATOR}\n");
     }
 
+    fn perft_stopped(&self, nodes: u64, elapsed: Duration) {
+        println!("\n{PERFT_SEPARATOR}");
+        println!(
+            "  Perft stopped! {nodes} nodes counted in {}ms",
+            elapsed.as_millis()
+        );
+        println!("{PERFT_SEPARATOR}\n");
+    }
+
     fn bench_finished(&self, nodes: u64, elapsed: Duration) {
         let milliseconds = elapsed.as_millis().max(1);
 

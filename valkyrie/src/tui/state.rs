@@ -37,11 +37,12 @@
 use std::{
     collections::HashMap,
     sync::{Mutex, MutexGuard, PoisonError},
+    time::{Duration, Instant},
 };
 
 use valkyrie_chess::{ChessBoard, FEN, Piece, Side, Square};
 
-use crate::tui::{canvas::Rect, editor::Editor};
+use crate::tui::{arrow::Arrow, canvas::Rect, editor::Editor, graphics::Protocol};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Placed {
@@ -49,7 +50,7 @@ pub struct Placed {
     pub white: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Position {
     pub squares: [[Option<Placed>; 8]; 8],
     pub fen: String,
@@ -79,10 +80,6 @@ impl Position {
         }
     }
 
-    pub fn piece_count(&self) -> usize {
-        self.squares.iter().flatten().flatten().count()
-    }
-
     pub fn black_to_move(&self) -> bool {
         self.field(1) == "b"
     }
@@ -90,6 +87,21 @@ impl Position {
     pub fn field(&self, index: usize) -> &str {
         self.fen.split_whitespace().nth(index).unwrap_or("-")
     }
+}
+
+fn move_arrow(text: &str) -> Option<Arrow> {
+    let bytes = text.as_bytes();
+    let square = |file: u8, rank: u8| {
+        let row = b'8'.checked_sub(rank).filter(|row| *row < 8)?;
+        let file = file.checked_sub(b'a').filter(|file| *file < 8)?;
+
+        Some((usize::from(row), usize::from(file)))
+    };
+
+    Some(Arrow::new(
+        square(*bytes.first()?, *bytes.get(1)?)?,
+        square(*bytes.get(2)?, *bytes.get(3)?)?,
+    ))
 }
 
 fn standard_castling(fen: &str) -> String {
@@ -157,9 +169,90 @@ pub struct State {
     pub regions: Vec<Region>,
     pub help_open: bool,
     pub position: Option<Position>,
+    pub screen: Screen,
+    pub perft: Option<PerftRun>,
+    pub intro: Option<Instant>,
+    pub placed: Option<Instant>,
+    pub stopped_at: Option<Instant>,
+    pub copied: Option<Copied>,
+    pub graphics: Option<Protocol>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Screen {
+    #[default]
+    Welcome,
+    Perft,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PerftOutcome {
+    pub nodes: u64,
+    pub elapsed: Duration,
+    pub stopped: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct PerftRun {
+    pub depth: u8,
+    pub bulk: bool,
+    pub moves: usize,
+    pub queue: Vec<Arrow>,
+    pub splits: Vec<(String, u64)>,
+    pub started: Instant,
+    pub outcome: Option<PerftOutcome>,
+}
+
+impl PerftRun {
+    pub fn new(depth: u8, bulk: bool, board: &ChessBoard) -> Self {
+        let mut queue = Vec::new();
+
+        board.map_legal_moves(|mv| queue.extend(move_arrow(&mv.to_string(false))));
+
+        Self {
+            depth,
+            bulk,
+            moves: queue.len(),
+            queue,
+            splits: Vec::new(),
+            started: Instant::now(),
+            outcome: None,
+        }
+    }
+
+    pub fn done(&self) -> bool {
+        self.outcome.is_some()
+    }
+
+    pub fn current(&self) -> Option<Arrow> {
+        self.queue
+            .get(self.splits.len())
+            .copied()
+            .filter(|_| !self.done())
+    }
+
+    pub fn nodes(&self) -> u64 {
+        self.outcome.map_or_else(
+            || self.splits.iter().map(|(_, nodes)| nodes).sum(),
+            |outcome| outcome.nodes,
+        )
+    }
+
+    pub fn elapsed(&self) -> Duration {
+        self.outcome
+            .map_or_else(|| self.started.elapsed(), |outcome| outcome.elapsed)
+    }
 }
 
 impl State {
+    pub fn place(&mut self, position: Position) {
+        if self.position.as_ref() != Some(&position) {
+            self.placed = Some(Instant::now());
+        }
+
+        self.position = Some(position);
+    }
+
     pub fn respond(&mut self, tone: Tone, text: &str) {
         let Some(line) = text.lines().map(str::trim).find(|line| !line.is_empty()) else {
             return;
@@ -194,4 +287,11 @@ impl State {
 
 pub fn lock(state: &Mutex<State>) -> MutexGuard<'_, State> {
     state.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+#[derive(Debug, Clone)]
+pub struct Copied {
+    pub label: String,
+    pub message: String,
+    pub at: Instant,
 }
