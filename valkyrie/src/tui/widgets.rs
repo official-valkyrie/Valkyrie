@@ -39,13 +39,15 @@ use std::time::Duration;
 use valkyrie_engine::prelude::{OptionKind, OptionSpec};
 
 use crate::tui::{
+    animation,
     canvas::{Canvas, Rect, fit},
     completion::{Catalog, CommandInfo, Suggestions},
     palette::{
         BACKGROUND, DARK_SQUARE, ERROR, GOLD, GOLD_LIGHT, HOVER, LIGHT_SQUARE, MUTED, NAVY, RULE,
         Rgb, STEEL, SURFACE, TEXT, WHITE,
     },
-    state::{Edit, Position, Region, Screen, State, Target, Tone},
+    report,
+    state::{Applying, Edit, Position, Region, Screen, State, Target, Tone},
     theme::{ACCENT, DIM, FAILURE, PLAIN, Style},
 };
 
@@ -82,6 +84,9 @@ const QUIT_LABEL: &str = "Quit";
 const STOP_LABEL: &str = "Stop";
 const CHIP_GAP: usize = 3;
 const COPY_NOTICE: Duration = Duration::from_secs(2);
+const WORKING_GAP: usize = 3;
+const WORKING_MIN_TRACK: usize = 12;
+const WORKING_SWEEP: usize = 10;
 const QUIT_KEY: &str = "ctrl+c";
 const EDIT_MIN_WIDTH: usize = 8;
 
@@ -133,6 +138,28 @@ pub fn settings(
 }
 
 fn value(canvas: &mut Canvas, line: Rect, spec: &OptionSpec, state: &State, background: Rgb) {
+    if let Some(applying) = state
+        .applying()
+        .filter(|applying| applying.name.eq_ignore_ascii_case(&spec.name))
+    {
+        let text = fit(&applying.value, line.width / 2);
+        let x = line.x + line.width - text.chars().count();
+
+        canvas.put(
+            x,
+            line.y,
+            &text,
+            Style::new(GOLD_LIGHT).on(background).bold(),
+        );
+        canvas.set(
+            x.saturating_sub(2),
+            line.y,
+            animation::spinner(applying.since),
+            Style::new(GOLD).on(background),
+        );
+        return;
+    }
+
     let current = state.option_value(&spec.name, &spec.default);
     let changed = current != spec.default;
 
@@ -183,10 +210,19 @@ fn edit_field(canvas: &mut Canvas, line: Rect, edit: &Edit) {
     canvas.set(x + width - 1, line.y, ' ', Style::new(BACKGROUND).on(GOLD));
 }
 
-pub fn response(canvas: &mut Canvas, x: usize, y: usize, width: usize, state: &State) {
-    let Some(response) = &state.response else {
-        return;
-    };
+pub fn response(
+    canvas: &mut Canvas,
+    x: usize,
+    y: usize,
+    width: usize,
+    state: &State,
+) -> Option<Rect> {
+    if let Some(applying) = state.applying() {
+        working(canvas, (x, y), width, applying, state.queue.len());
+        return None;
+    }
+
+    let response = state.response.as_ref()?;
 
     let (marker, marker_style, text_style) = match response.tone {
         Tone::Pending if state.busy => ("●", ACCENT, Style::new(TEXT)),
@@ -198,12 +234,13 @@ pub fn response(canvas: &mut Canvas, x: usize, y: usize, width: usize, state: &S
 
     canvas.put(x, y, marker, marker_style);
 
-    let end = canvas.put(
-        x + 2,
-        y,
-        &fit(&response.text, width.saturating_sub(2)),
-        text_style,
-    );
+    let text = fit(&response.text, width.saturating_sub(2));
+
+    if response.tone == Tone::Result {
+        return Some(copyable(canvas, x + 2, y, &[text], text_style, state));
+    }
+
+    let end = canvas.put(x + 2, y, &text, text_style);
 
     if response.tone == Tone::Pending && state.busy {
         canvas.put(
@@ -212,6 +249,68 @@ pub fn response(canvas: &mut Canvas, x: usize, y: usize, width: usize, state: &S
             &fit("  ·  searching", (x + width).saturating_sub(end)),
             DIM,
         );
+    }
+
+    None
+}
+
+fn working(
+    canvas: &mut Canvas,
+    (x, y): (usize, usize),
+    width: usize,
+    applying: &Applying,
+    queued: usize,
+) {
+    let right = x + width;
+
+    canvas.set(
+        x,
+        y,
+        animation::spinner(applying.since),
+        Style::new(GOLD).bold(),
+    );
+
+    let mut end = canvas.put(
+        x + 2,
+        y,
+        &fit(&applying.description(), width.saturating_sub(2)),
+        Style::new(GOLD_LIGHT).bold(),
+    );
+    end = canvas.put(
+        end,
+        y,
+        &fit(
+            &format!("  ·  {}", report::time(applying.since.elapsed())),
+            right.saturating_sub(end),
+        ),
+        DIM,
+    );
+
+    if queued > 0 {
+        end = canvas.put(end, y, "  ·  ", DIM);
+        end = canvas.put(
+            end,
+            y,
+            &fit(&format!("{queued} queued"), right.saturating_sub(end)),
+            Style::new(GOLD),
+        );
+    }
+
+    let track = (end + WORKING_GAP, right);
+    let length = track.1.saturating_sub(track.0);
+
+    if length >= WORKING_MIN_TRACK {
+        let lit = animation::sweep(applying.since, length, WORKING_SWEEP);
+
+        for column in 0..length {
+            let (symbol, color) = if lit.contains(&column) {
+                ('━', GOLD)
+            } else {
+                ('─', RULE)
+            };
+
+            canvas.set(track.0 + column, y, symbol, Style::new(color));
+        }
     }
 }
 
@@ -331,6 +430,31 @@ pub fn footer(
         return;
     }
 
+    if state.applying().is_some() {
+        if state.queue.is_empty() {
+            text(
+                canvas,
+                &mut x,
+                "The engine is busy · new commands wait in a queue",
+                DIM,
+            );
+        } else {
+            text(canvas, &mut x, "Queued  ", DIM);
+            text(
+                canvas,
+                &mut x,
+                &state
+                    .queue
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("  ·  "),
+                Style::new(STEEL),
+            );
+        }
+        return;
+    }
+
     if let Some(edit) = &state.editing {
         for (key, label) in [("Enter", "apply"), ("Esc", "cancel")] {
             x = chip_within(canvas, x, area.y, key, label, limit);
@@ -371,6 +495,10 @@ pub fn footer(
                 Style::new(STEEL),
             );
         }
+        Some(Target::Line { .. }) => {
+            text(canvas, &mut x, "Click to ", DIM);
+            text(canvas, &mut x, "copy this line", Style::new(STEEL));
+        }
         Some(Target::Quit) => {
             let action = if state.busy {
                 "Stop the search"
@@ -379,13 +507,16 @@ pub fn footer(
             };
             text(canvas, &mut x, action, Style::new(STEEL));
         }
-        None if state.screen == Screen::Perft => match &state.perft {
-            Some(run) if run.done() => {
+        None if state.screen != Screen::Welcome => {
+            if state.report_done() {
                 x = chip_within(canvas, x, area.y, "any key", "back to the console", limit);
                 text(canvas, &mut x, "Hover the results to copy them", DIM);
+            } else if state.screen == Screen::Search {
+                text(canvas, &mut x, "Searching…", DIM);
+            } else {
+                text(canvas, &mut x, "Counting legal moves…", DIM);
             }
-            _ => text(canvas, &mut x, "Counting legal moves…", DIM),
-        },
+        }
         None => match suggestions.usage {
             Some(usage) => {
                 text(canvas, &mut x, "usage  ", DIM);

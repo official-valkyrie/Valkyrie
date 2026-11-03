@@ -52,8 +52,7 @@ use crate::{
         animation,
         canvas::Canvas,
         completion::{Catalog, suggest},
-        graphics::Protocol,
-        large_board::SquareImage,
+        graphics::{Picture, Protocol},
         palette::BACKGROUND,
         screens::{self, Frame},
         state::{State, lock},
@@ -62,7 +61,7 @@ use crate::{
 
 pub const FPS: u32 = 30;
 
-const FRAME_TIME: Duration = Duration::from_nanos(1_000_000_000 / FPS as u64);
+pub const FRAME_TIME: Duration = Duration::from_nanos(1_000_000_000 / FPS as u64);
 const FALLBACK_SIZE: (u16, u16) = (80, 24);
 const ENTER: &str = "\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[?2004h";
 const LEAVE: &str = "\x1b]111\x1b\\\x1b[0m\x1b[?2004l\x1b[?7h\x1b[?25h\x1b[?1049l";
@@ -146,7 +145,7 @@ impl Drop for Renderer {
 fn run(state: &Mutex<State>, catalog: &Catalog, stop: &AtomicBool) {
     let mut canvas = Canvas::new(0, 0);
     let mut shown = Vec::new();
-    let mut shown_pieces: Vec<SquareImage> = Vec::new();
+    let mut shown_pieces: Vec<Picture> = Vec::new();
     let mut settling_until = Instant::now();
     let mut last_full = Instant::now();
 
@@ -163,12 +162,13 @@ fn run(state: &Mutex<State>, catalog: &Catalog, stop: &AtomicBool) {
         canvas.clear();
         let (pieces, protocol) = compose(&mut canvas, state, catalog);
 
-        let left: Vec<&SquareImage> = shown_pieces
+        let left: Vec<&Picture> = shown_pieces
             .iter()
             .filter(|shown| !pieces.iter().any(|piece| piece.same_place(shown)))
             .collect();
-        let board = pieces.first().map(|piece| piece.board);
-        let removed = left.iter().any(|shown| Some(shown.board) != board);
+        let removed = left
+            .iter()
+            .any(|shown| !pieces.iter().any(|piece| piece.group() == shown.group()));
         let full =
             resized || removed || started < settling_until || started - last_full >= FULL_REPAINT;
 
@@ -215,7 +215,7 @@ fn compose(
     canvas: &mut Canvas,
     state: &Mutex<State>,
     catalog: &Catalog,
-) -> (Vec<SquareImage>, Option<Protocol>) {
+) -> (Vec<Picture>, Option<Protocol>) {
     let mut state = lock(state);
     let suggestions = suggest(catalog, &state.editor.before_cursor());
     let intro = *state.intro.get_or_insert_with(Instant::now);

@@ -40,8 +40,9 @@ use crate::{
     terminal,
     tui::{
         animation::PIECE_STEPS,
+        canvas::Rect,
         large_board::{PieceImage, SquareImage},
-        palette::{GOLD, PIECE_OUTLINE, Rgb, WHITE},
+        palette::{BACKGROUND, GOLD, LOSING, PIECE_OUTLINE, Rgb, WHITE, WINNING},
     },
 };
 
@@ -57,6 +58,12 @@ const VIRTUAL_CELL: (usize, usize) = (10, 20);
 const SIXEL_BAND: usize = 6;
 const SIXEL_OFFSET: u8 = 63;
 const PALETTE_LIMIT: usize = 256;
+const WDL_RESOLUTION: f32 = 1000.0;
+const WDL_THICKNESS: f32 = 0.6;
+const WDL_MIN_THICKNESS: f32 = 4.0;
+const WDL_SHADE: Rgb = Rgb(0, 0, 0);
+const WDL_SHADING: f32 = 0.18;
+const WDL_SEAM: f32 = 1.0;
 const PIECES: [&[u8]; 6] = [
     include_bytes!("assets/pawn.la"),
     include_bytes!("assets/knight.la"),
@@ -96,26 +103,28 @@ impl Protocol {
         })
     }
 
-    pub fn encode(self, image: &SquareImage) -> String {
-        let place = format!("\x1b[{};{}H", image.y + 1, image.x + 1);
+    pub fn encode(self, picture: &Picture) -> String {
+        let (x, y) = picture.origin();
+        let (columns, rows) = picture.cells();
+        let place = format!("\x1b[{};{}H", y + 1, x + 1);
 
         match self {
-            Self::Kitty => format!("{place}{}", kitty(image)),
+            Self::Kitty => format!("{place}{}", kitty(picture)),
             Self::Sixel { cell } => format!(
                 "{place}{}",
                 sixel(
-                    image,
-                    image.columns * cell.0,
-                    image.rows * cell.1 / SIXEL_BAND * SIXEL_BAND,
+                    picture,
+                    columns * cell.0,
+                    rows * cell.1 / SIXEL_BAND * SIXEL_BAND,
                 )
             ),
         }
     }
 
-    pub fn erase(self, image: &SquareImage) -> String {
+    pub fn erase(self, picture: &Picture) -> String {
         match self {
-            Self::Kitty => format!("\x1b_Ga=d,d=i,i={},q=2\x1b\\", kitty_id(image)),
-            Self::Sixel { .. } => self.encode(&image.plain()),
+            Self::Kitty => format!("\x1b_Ga=d,d=i,i={},q=2\x1b\\", kitty_id(picture)),
+            Self::Sixel { .. } => self.encode(&picture.plain()),
         }
     }
 
@@ -125,6 +134,140 @@ impl Protocol {
             Self::Sixel { .. } => String::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WdlImage {
+    pub x: usize,
+    pub y: usize,
+    pub rows: usize,
+    pub shares: [u16; 3],
+}
+
+impl WdlImage {
+    pub fn new((x, y): (usize, usize), rows: usize, [win, draw, loss]: [f32; 3]) -> Self {
+        let share = |value: f32| (value.clamp(0.0, 1.0) * WDL_RESOLUTION).round() as u16;
+
+        Self {
+            x,
+            y,
+            rows,
+            shares: [share(win), share(draw), share(loss)],
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Picture {
+    Square(SquareImage),
+    Wdl(WdlImage),
+}
+
+impl Picture {
+    pub const fn origin(&self) -> (usize, usize) {
+        match self {
+            Self::Square(image) => (image.x, image.y),
+            Self::Wdl(image) => (image.x, image.y),
+        }
+    }
+
+    pub const fn cells(&self) -> (usize, usize) {
+        match self {
+            Self::Square(image) => (image.columns, image.rows),
+            Self::Wdl(image) => (1, image.rows),
+        }
+    }
+
+    pub const fn group(&self) -> Rect {
+        match self {
+            Self::Square(image) => image.board,
+            Self::Wdl(image) => Rect::new(image.x, image.y, 1, image.rows),
+        }
+    }
+
+    pub fn same_place(&self, other: &Self) -> bool {
+        (self.origin(), self.group()) == (other.origin(), other.group())
+    }
+
+    fn plain(&self) -> Self {
+        match self {
+            Self::Square(image) => Self::Square(image.plain()),
+            Self::Wdl(image) => Self::Wdl(WdlImage {
+                shares: [0; 3],
+                ..*image
+            }),
+        }
+    }
+
+    const fn background(&self) -> Rgb {
+        match self {
+            Self::Square(image) => image.square,
+            Self::Wdl(_) => BACKGROUND,
+        }
+    }
+
+    const fn kitty_size(&self) -> (usize, usize) {
+        match self {
+            Self::Square(_) => (KITTY_SQUARE, KITTY_SQUARE),
+            Self::Wdl(image) => (VIRTUAL_CELL.0, image.rows * VIRTUAL_CELL.1),
+        }
+    }
+
+    fn pixels(&self, width: usize, height: usize) -> Vec<(Rgb, f32)> {
+        match self {
+            Self::Square(image) => square_pixels(image, width, height),
+            Self::Wdl(image) => wdl_pixels(image, width, height),
+        }
+    }
+}
+
+fn wdl_pixels(image: &WdlImage, width: usize, height: usize) -> Vec<(Rgb, f32)> {
+    let mut pixels = vec![(BACKGROUND, 0.0); width * height];
+    let total: f32 = image.shares.iter().map(|share| f32::from(*share)).sum();
+
+    if total <= 0.0 || height < 2 {
+        return pixels;
+    }
+
+    let length = height as f32;
+    let thickness = (width as f32 * WDL_THICKNESS).max(WDL_MIN_THICKNESS);
+    let radius = thickness / 2.0;
+    let center = width as f32 / 2.0;
+    let colors = [WINNING, GOLD, LOSING];
+    let mut edges = [0.0f32; 3];
+    let mut sum = 0.0;
+
+    for (edge, share) in edges.iter_mut().zip(image.shares) {
+        sum += f32::from(share) / total;
+        *edge = sum * length;
+    }
+
+    for y in 0..height {
+        for x in 0..width {
+            let along = length - (y as f32 + 0.5);
+            let across = x as f32 + 0.5;
+            let spine = along.clamp(radius, length - radius);
+            let distance = (along - spine).hypot(across - center) - radius;
+            let coverage = (0.5 - distance).clamp(0.0, 1.0);
+
+            if coverage <= 0.0 {
+                continue;
+            }
+
+            let segment = edges.iter().position(|edge| along < *edge).unwrap_or(2);
+            let depth = ((across - (center - radius)) / thickness).clamp(0.0, 1.0);
+            let color = colors[segment].lerp(WDL_SHADE, depth * WDL_SHADING);
+            let seam = edges[..2]
+                .iter()
+                .filter(|edge| **edge > 0.0 && **edge < length)
+                .map(|edge| (along - edge).abs() - WDL_SEAM)
+                .fold(f32::MAX, f32::min);
+
+            pixels[y * width + x] = (color, coverage * (seam + 0.5).clamp(0.0, 1.0));
+        }
+    }
+
+    pixels
 }
 
 fn cell_pixels() -> Option<(usize, usize)> {
@@ -142,14 +285,14 @@ fn cell_pixels() -> Option<(usize, usize)> {
     })
 }
 
-fn pixels(image: &SquareImage, width: usize, height: usize) -> Vec<(Rgb, f32)> {
+fn square_pixels(image: &SquareImage, width: usize, height: usize) -> Vec<(Rgb, f32)> {
     let mut pixels = vec![(image.square, 0.0); width * height];
 
     if let Some(piece) = image.piece {
         paint_piece(&mut pixels, piece, width, height);
     }
 
-    if let Some(arrow) = image.arrow {
+    for arrow in &image.arrows {
         let unit = width as f32;
         let offset = (width as f32 - height as f32) / 2.0;
         let (row, file) = image.shown;
@@ -225,12 +368,17 @@ fn sample(piece: &[u8], x: usize, y: usize, size: usize) -> (f32, f32) {
     (alpha / count, light / alpha)
 }
 
-fn kitty_id(image: &SquareImage) -> usize {
-    1 + image.y * KITTY_ID_STRIDE + image.x
+fn kitty_id(picture: &Picture) -> usize {
+    let (x, y) = picture.origin();
+
+    1 + y * KITTY_ID_STRIDE + x
 }
 
-fn kitty(image: &SquareImage) -> String {
-    let bytes: Vec<u8> = pixels(image, KITTY_SQUARE, KITTY_SQUARE)
+fn kitty(picture: &Picture) -> String {
+    let (width, height) = picture.kitty_size();
+    let (columns, rows) = picture.cells();
+    let bytes: Vec<u8> = picture
+        .pixels(width, height)
         .iter()
         .flat_map(|(color, alpha)| [color.0, color.1, color.2, (alpha * 255.0) as u8])
         .collect();
@@ -240,7 +388,7 @@ fn kitty(image: &SquareImage) -> String {
         .chunks(KITTY_CHUNK)
         .map(|chunk| std::str::from_utf8(chunk).unwrap_or_default())
         .collect();
-    let id = kitty_id(image);
+    let id = kitty_id(picture);
     let mut out = String::new();
 
     for (index, chunk) in chunks.iter().enumerate() {
@@ -249,8 +397,7 @@ fn kitty(image: &SquareImage) -> String {
         if index == 0 {
             let _ = write!(
                 out,
-                "\x1b_Ga=T,f=32,s={KITTY_SQUARE},v={KITTY_SQUARE},c={},r={},i={id},p=1,C=1,q=2,m={more};{chunk}\x1b\\",
-                image.columns, image.rows
+                "\x1b_Ga=T,f=32,s={width},v={height},c={columns},r={rows},i={id},p=1,C=1,q=2,m={more};{chunk}\x1b\\"
             );
         } else {
             let _ = write!(out, "\x1b_Gm={more};{chunk}\x1b\\");
@@ -260,10 +407,12 @@ fn kitty(image: &SquareImage) -> String {
     out
 }
 
-fn sixel(image: &SquareImage, width: usize, height: usize) -> String {
-    let colors: Vec<Option<Rgb>> = pixels(image, width, height)
+fn sixel(picture: &Picture, width: usize, height: usize) -> String {
+    let background = picture.background();
+    let colors: Vec<Option<Rgb>> = picture
+        .pixels(width, height)
         .into_iter()
-        .map(|(color, alpha)| Some(image.square.lerp(color, alpha)))
+        .map(|(color, alpha)| Some(background.lerp(color, alpha)))
         .collect();
     let (palette, indices) = quantize(&colors);
     let mut out = format!("\x1bP0;1q\"1;1;{width};{height}");

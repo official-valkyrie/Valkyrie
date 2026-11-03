@@ -71,6 +71,10 @@ pub const MUTED: Rgb = Rgb(88, 98, 118);
 pub const RULE: Rgb = Rgb(36, 46, 66);
 pub const ERROR: Rgb = Rgb(222, 108, 96);
 
+pub const WINNING: Rgb = Rgb(96, 186, 74);
+pub const BALANCED: Rgb = Rgb(164, 152, 66);
+pub const LOSING: Rgb = Rgb(214, 86, 64);
+
 pub const LIGHT_SQUARE: Rgb = Rgb(56, 76, 114);
 pub const DARK_SQUARE: Rgb = Rgb(32, 46, 76);
 pub const PIECE_OUTLINE: Rgb = Rgb(10, 13, 20);

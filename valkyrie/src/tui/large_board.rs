@@ -58,7 +58,7 @@ pub struct PieceImage {
     pub opacity: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SquareImage {
     pub x: usize,
     pub y: usize,
@@ -68,19 +68,15 @@ pub struct SquareImage {
     pub square: Rgb,
     pub board: Rect,
     pub piece: Option<PieceImage>,
-    pub arrow: Option<Arrow>,
+    pub arrows: Vec<Arrow>,
 }
 
 impl SquareImage {
-    pub fn same_place(&self, other: &Self) -> bool {
-        (self.x, self.y, self.board) == (other.x, other.y, other.board)
-    }
-
-    pub const fn plain(self) -> Self {
+    pub fn plain(&self) -> Self {
         Self {
             piece: None,
-            arrow: None,
-            ..self
+            arrows: Vec::new(),
+            ..self.clone()
         }
     }
 }
@@ -91,11 +87,14 @@ pub fn images(
     (columns, rows): (usize, usize),
     position: &Position,
     opacity: impl Fn(usize) -> u8,
-    arrow: Option<Arrow>,
+    arrows: &[Arrow],
 ) -> Vec<SquareImage> {
     let flipped = position.black_to_move();
     let orient = |index: usize| if flipped { 7 - index } else { index };
-    let arrow = arrow.map(|arrow| if flipped { arrow.flipped() } else { arrow });
+    let arrows: Vec<Arrow> = arrows
+        .iter()
+        .map(|arrow| if flipped { arrow.flipped() } else { *arrow })
+        .collect();
     let order = widgets::placement_order(position);
     let mut images = Vec::new();
 
@@ -109,9 +108,13 @@ pub fn images(
                     opacity: opacity(*slot),
                 })
                 .filter(|piece| piece.opacity > 0);
-            let arrow = arrow.filter(|arrow| arrow.touches((shown_row, shown_file)));
+            let arrows: Vec<Arrow> = arrows
+                .iter()
+                .filter(|arrow| arrow.touches((shown_row, shown_file)))
+                .copied()
+                .collect();
 
-            if piece.is_some() || arrow.is_some() {
+            if piece.is_some() || !arrows.is_empty() {
                 images.push(SquareImage {
                     x: board.x + label + shown_file * columns,
                     y: board.y + shown_row * rows,
@@ -121,7 +124,7 @@ pub fn images(
                     square: square_color(row, file),
                     board,
                     piece,
-                    arrow,
+                    arrows,
                 });
             }
         }

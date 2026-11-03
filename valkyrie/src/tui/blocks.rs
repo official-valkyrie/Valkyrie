@@ -42,9 +42,10 @@ use crate::tui::{
     },
     logo::Logo,
     palette::{GOLD, STEEL},
-    perft,
+    perft, report,
     screens::Frame,
-    state::{PerftRun, Region, Target},
+    search,
+    state::{HASH_OPTION, Region, Screen, State, Target},
     theme::{DIM, Style},
     widgets::{
         self, BOARD_LABEL_WIDTH, BOARD_ROWS, BOARD_SQUARE_WIDTH, BOARD_WIDTH, FEN_LABEL,
@@ -66,8 +67,9 @@ pub enum Block {
     Response,
     Input,
     Footer,
-    PerftHeader,
-    Splits,
+    Header,
+    Wdl,
+    Results,
     Summary,
 }
 
@@ -159,7 +161,20 @@ pub fn draw(
                 regions,
             );
         }
-        Block::Response => widgets::response(canvas, area.x, area.y, area.width, state),
+        Block::Response => {
+            if let (Some(copy), Some(response)) = (
+                widgets::response(canvas, area.x, area.y, area.width, state),
+                &state.response,
+            ) {
+                regions.push(Region {
+                    area: copy,
+                    target: Target::Copy {
+                        label: "result",
+                        text: response.text.clone(),
+                    },
+                });
+            }
+        }
         Block::Input => widgets::input(canvas, area, state, frame.suggestions),
         Block::Footer => widgets::footer(
             canvas,
@@ -169,40 +184,76 @@ pub fn draw(
             frame.suggestions,
             regions,
         ),
-        Block::PerftHeader => {
-            if let Some(run) = &state.perft {
-                perft::header(canvas, area, run);
+        Block::Header => match (state.screen, &state.perft, &state.search) {
+            (Screen::Perft, Some(run), _) => perft::header(canvas, area, run),
+            (Screen::Search, _, Some(_)) => {
+                search::header(canvas, area, hash_size(frame));
+            }
+            _ => {}
+        },
+        Block::Wdl => {
+            if let Some(run) = &state.search {
+                search::wdl_column(canvas, area, run, frame.pictures());
             }
         }
-        Block::Splits => {
-            if let Some(run) = &state.perft {
-                perft::splits(canvas, area, run, perft::tones(state).0);
-                copy_region(regions, area, run, perft::RESULTS, perft::results_text);
+        Block::Results => match (state.screen, &state.perft, &state.search) {
+            (Screen::Perft, Some(run), _) => {
+                perft::splits(canvas, area, run, report::tones(state).0);
+                copy_region(
+                    regions,
+                    area,
+                    state,
+                    report::RESULTS,
+                    perft::results_text(run),
+                );
             }
-        }
+            (Screen::Search, _, Some(run)) => {
+                search::results(canvas, area, run, state, regions);
+            }
+            _ => {}
+        },
         Block::Summary => {
-            if let Some(run) = &state.perft {
-                perft::summary(canvas, area, run, perft::tones(state).1);
-                copy_region(regions, area, run, perft::SUMMARY, perft::summary_text);
-            }
+            let tone = report::tones(state).1;
+            let text = match (state.screen, &state.perft, &state.search) {
+                (Screen::Perft, Some(run), _) => {
+                    perft::summary(canvas, area, run, tone);
+                    perft::summary_text(run)
+                }
+                (Screen::Search, _, Some(run)) => {
+                    search::summary(canvas, area, run, tone);
+                    search::summary_text(run)
+                }
+                _ => return,
+            };
+
+            copy_region(regions, area, state, report::SUMMARY, text);
         }
     }
+}
+
+fn hash_size(frame: &Frame<'_>) -> String {
+    let default = frame
+        .catalog
+        .option(HASH_OPTION)
+        .map_or("", |spec| spec.default.as_str());
+
+    format!(
+        "{} MB",
+        frame.state.option_value(HASH_OPTION, default).trim()
+    )
 }
 
 fn copy_region(
     regions: &mut Vec<Region>,
     area: Rect,
-    run: &PerftRun,
+    state: &State,
     label: &'static str,
-    text: fn(&PerftRun) -> String,
+    text: String,
 ) {
-    if run.done() {
+    if state.report_done() {
         regions.push(Region {
             area,
-            target: Target::Copy {
-                label,
-                text: text(run),
-            },
+            target: Target::Copy { label, text },
         });
     }
 }

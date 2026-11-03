@@ -55,7 +55,7 @@ use crate::{
     tui::{
         completion::Catalog,
         editor::Outcome,
-        state::{Copied, Edit, PerftRun, Screen, State, Target, Tone, lock},
+        state::{Applying, Copied, Edit, Screen, State, Target, Tone, lock},
     },
 };
 
@@ -129,7 +129,17 @@ fn run(state: &Mutex<State>, catalog: &Catalog, sender: &Sender<String>, stop: &
 }
 
 fn submit(state: &mut State, sender: &Sender<String>, line: String) {
+    if state.applying.is_some() {
+        state.queue.push_back(line);
+        return;
+    }
+
     state.respond(Tone::Pending, &line);
+
+    if let Some(applying) = Applying::parse(&line) {
+        state.applying = Some(applying);
+    }
+
     let _ = sender.send(line);
 }
 
@@ -148,11 +158,7 @@ fn key_pressed(state: &Mutex<State>, catalog: &Catalog, sender: &Sender<String>,
         return;
     }
 
-    if state.screen == Screen::Perft {
-        if !state.perft.as_ref().is_some_and(PerftRun::done) {
-            return;
-        }
-
+    if state.screen != Screen::Welcome && state.report_done() {
         state.screen = Screen::Welcome;
         state.intro = Some(Instant::now());
     }
@@ -227,6 +233,7 @@ fn mouse_used(state: &Mutex<State>, catalog: &Catalog, sender: &Sender<String>, 
         Some(Target::Setting(name)) => activate(&mut state, catalog, sender, &name),
         Some(Target::Suggestion(index)) => state.editor.choose(index, catalog),
         Some(Target::Copy { label, text }) => copy(&mut state, label, &text),
+        Some(Target::Line { text, .. }) => copy(&mut state, "line", &text),
         Some(Target::Quit) => {
             state.editing = None;
             let command = if state.busy { "stop" } else { "quit" };

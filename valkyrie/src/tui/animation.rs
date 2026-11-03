@@ -44,7 +44,7 @@ use crate::tui::{
 pub const PIECE_STEPS: u8 = 6;
 
 const WELCOME_DURATION: Duration = Duration::from_millis(400);
-const PERFT_DURATION: Duration = Duration::from_millis(1000);
+const REPORT_DURATION: Duration = Duration::from_millis(1000);
 const BOARD_DURATION: Duration = Duration::from_millis(1000);
 
 const ROW_DELAY: f32 = 0.05;
@@ -53,6 +53,9 @@ const ROW_SPAN: f32 = 0.35;
 const BOARD_FADE: f32 = 0.1;
 const PIECE_FADE: f32 = 0.3;
 const PIECE_DELAY: f32 = 0.014;
+const SPINNER: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+const SPINNER_FRAME: Duration = Duration::from_millis(80);
+const SWEEP_STEP: Duration = Duration::from_millis(25);
 
 #[derive(Debug, Clone, Copy)]
 pub struct BoardClock {
@@ -90,6 +93,24 @@ impl BoardClock {
     }
 }
 
+pub fn spinner(since: Instant) -> char {
+    let frame = since.elapsed().as_millis() / SPINNER_FRAME.as_millis();
+
+    SPINNER[frame as usize % SPINNER.len()]
+}
+
+pub fn sweep(since: Instant, width: usize, length: usize) -> std::ops::Range<usize> {
+    let travel = width.saturating_sub(length).max(1);
+    let step = (since.elapsed().as_millis() / SWEEP_STEP.as_millis()) as usize % (travel * 2);
+    let start = if step < travel {
+        step
+    } else {
+        travel * 2 - step
+    };
+
+    start..(start + length).min(width)
+}
+
 pub fn smooth(amount: f32) -> f32 {
     let amount = amount.clamp(0.0, 1.0);
 
@@ -121,7 +142,7 @@ pub fn reveal_rows(canvas: &mut Canvas, progress: f32, keep: &[Rect]) {
 pub const fn duration(screen: Screen) -> Duration {
     match screen {
         Screen::Welcome => WELCOME_DURATION,
-        Screen::Perft => PERFT_DURATION,
+        Screen::Perft | Screen::Search => REPORT_DURATION,
     }
 }
 

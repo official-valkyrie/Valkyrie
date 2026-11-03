@@ -36,14 +36,17 @@
 
 use crate::tui::{
     animation,
+    arrow::Arrow,
     blocks::{self, Block, BoardSize, Placement},
     canvas::{Canvas, Rect},
     completion::{Catalog, Suggestions},
+    graphics::Picture,
     large_board::{self, SquareImage},
     logo::Logo,
     palette::{GOLD_LIGHT, Rgb},
-    perft,
-    state::{PerftRun, Region, Screen, State},
+    report::SUMMARY_ROWS,
+    search,
+    state::{Region, Screen, State},
     theme::ACCENT,
     widgets::{self, DETAIL_ROWS, FEN_LABEL_WIDTH, INPUT_HEIGHT},
 };
@@ -62,13 +65,15 @@ const FEN_GAP: usize = 1;
 const RESPONSE_ROWS: usize = 1;
 const BOARD_GAP: usize = 4;
 const DETAILS_MIN_WIDTH: usize = 18;
-const PERFT_TOP: usize = 1;
-const PERFT_MAX_WIDTH: usize = 116;
-const PERFT_COLUMN_GAP: usize = 5;
-const SPLITS_MIN_WIDTH: usize = 42;
-const PERFT_ARROW_COLOR: Rgb = GOLD_LIGHT;
-const PERFT_ARROW_WIDTH: f32 = 0.16;
-const PERFT_ARROW_OPACITY: f32 = 0.8;
+const REPORT_TOP: usize = 1;
+const REPORT_MAX_WIDTH: usize = 116;
+const REPORT_COLUMN_GAP: usize = 5;
+const RESULTS_MIN_WIDTH: usize = 42;
+const WDL_MARGIN: usize = 2;
+const ARROW_COLOR: Rgb = GOLD_LIGHT;
+const PERFT_ARROW: (f32, f32) = (0.16, 0.8);
+const LINE_ARROWS: [(f32, f32); 4] = [(0.16, 0.85), (0.125, 0.6), (0.1, 0.45), (0.08, 0.34)];
+const REST_ARROW: (f32, f32) = (0.065, 0.22);
 
 pub struct Frame<'a> {
     pub state: &'a State,
@@ -82,6 +87,10 @@ impl Frame<'_> {
         self.state.graphics.is_some() && !self.state.help_open
     }
 
+    pub fn pictures(&self) -> bool {
+        self.images() && self.progress.is_none()
+    }
+
     fn fen_rows(&self, width: usize) -> usize {
         self.state.position.as_ref().map_or(0, |position| {
             widgets::fen_lines(position, width.saturating_sub(FEN_LABEL_WIDTH)).len()
@@ -89,7 +98,7 @@ impl Frame<'_> {
     }
 }
 
-pub fn draw(canvas: &mut Canvas, frame: &Frame<'_>) -> (Vec<Region>, Vec<SquareImage>) {
+pub fn draw(canvas: &mut Canvas, frame: &Frame<'_>) -> (Vec<Region>, Vec<Picture>) {
     let (width, height) = (canvas.width(), canvas.height());
     let mut regions = Vec::new();
 
@@ -107,7 +116,7 @@ pub fn draw(canvas: &mut Canvas, frame: &Frame<'_>) -> (Vec<Region>, Vec<SquareI
     let body = Rect::new(MARGIN, 0, width - MARGIN * 2, height - 1);
     let mut placements = match frame.state.screen {
         Screen::Welcome => welcome(body, frame),
-        Screen::Perft => perft(body, frame),
+        Screen::Perft | Screen::Search => report(body, frame),
     };
 
     placements.push(Placement::new(
@@ -151,7 +160,7 @@ pub fn draw(canvas: &mut Canvas, frame: &Frame<'_>) -> (Vec<Region>, Vec<SquareI
         animation::reveal_rows(canvas, progress, &animated);
     }
 
-    let pieces = placements
+    let mut pictures: Vec<Picture> = placements
         .iter()
         .find_map(|placement| match placement.block {
             Block::Board(size) if frame.images() => {
@@ -159,9 +168,23 @@ pub fn draw(canvas: &mut Canvas, frame: &Frame<'_>) -> (Vec<Region>, Vec<SquareI
             }
             _ => None,
         })
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .into_iter()
+        .map(Picture::Square)
+        .collect();
 
-    (regions, pieces)
+    if frame.pictures()
+        && let Some(run) = frame.state.search.as_ref()
+        && frame.state.screen == Screen::Search
+        && let Some(column) = placements
+            .iter()
+            .find(|placement| placement.block == Block::Wdl)
+        && let Some(wdl) = search::wdl_picture(column.area, run)
+    {
+        pictures.push(Picture::Wdl(wdl));
+    }
+
+    (regions, pictures)
 }
 
 fn board_images(area: Rect, size: BoardSize, frame: &Frame<'_>, height: usize) -> Vec<SquareImage> {
@@ -174,16 +197,11 @@ fn board_images(area: Rect, size: BoardSize, frame: &Frame<'_>, height: usize) -
         let fade = clock.map_or(1.0, |clock| clock.piece(slot));
         (fade * f32::from(animation::PIECE_STEPS)).round() as u8
     };
-    let arrow = clock
-        .is_none()
-        .then(|| frame.state.perft.as_ref().and_then(PerftRun::current))
-        .flatten()
-        .map(|arrow| {
-            arrow
-                .color(PERFT_ARROW_COLOR)
-                .width(PERFT_ARROW_WIDTH)
-                .opacity(PERFT_ARROW_OPACITY)
-        });
+    let arrows = if clock.is_none() {
+        arrows(frame.state)
+    } else {
+        Vec::new()
+    };
 
     large_board::images(
         area,
@@ -191,43 +209,116 @@ fn board_images(area: Rect, size: BoardSize, frame: &Frame<'_>, height: usize) -
         size.square(),
         position,
         opacity,
-        arrow,
+        &arrows,
     )
 }
 
-fn perft(body: Rect, frame: &Frame<'_>) -> Vec<Placement> {
-    let span = body.width.min(PERFT_MAX_WIDTH);
+fn arrows(state: &State) -> Vec<Arrow> {
+    let style = |arrow: Arrow, (width, opacity): (f32, f32)| {
+        arrow.color(ARROW_COLOR).width(width).opacity(opacity)
+    };
+
+    match (state.screen, &state.perft, &state.search) {
+        (Screen::Perft, Some(run), _) => run
+            .current()
+            .map(|arrow| style(arrow, PERFT_ARROW))
+            .into_iter()
+            .collect(),
+        (Screen::Search, _, Some(run)) => {
+            let hovered = search::hovered(state);
+            let mut arrows: Vec<(bool, Arrow)> = run
+                .lines
+                .iter()
+                .enumerate()
+                .filter_map(|(rank, line)| {
+                    let focused = hovered == Some(rank);
+                    let tier = if focused {
+                        LINE_ARROWS[0]
+                    } else {
+                        LINE_ARROWS.get(rank).copied().unwrap_or(REST_ARROW)
+                    };
+                    line.arrow.map(|arrow| (focused, style(arrow, tier)))
+                })
+                .rev()
+                .collect();
+
+            arrows.sort_by_key(|(focused, _)| *focused);
+            arrows.into_iter().map(|(_, arrow)| arrow).collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn report(body: Rect, frame: &Frame<'_>) -> Vec<Placement> {
+    let span = body.width.min(REPORT_MAX_WIDTH);
     let x = body.x + (body.width - span) / 2;
-    let header = body.y + PERFT_TOP;
+    let header = body.y + REPORT_TOP;
     let main = header + 1 + TITLE_GAP;
+    let search = frame.state.screen == Screen::Search;
+    let wdl = if search {
+        WDL_MARGIN + search::WDL_WIDTH
+    } else {
+        0
+    };
     let large = frame.state.graphics.is_some()
         && main + BoardSize::Large.rows() <= body.bottom()
-        && span >= BoardSize::Large.width() + PERFT_COLUMN_GAP + SPLITS_MIN_WIDTH;
+        && span >= BoardSize::Large.width() + wdl + REPORT_COLUMN_GAP + RESULTS_MIN_WIDTH;
     let size = if large {
         BoardSize::Large
     } else {
         BoardSize::Small
     };
 
-    let right = x + size.width() + PERFT_COLUMN_GAP;
-    let right_width = span - size.width() - PERFT_COLUMN_GAP;
-    let summary = body
-        .bottom()
-        .saturating_sub(SECTION_GAP + perft::SUMMARY_ROWS);
-    let splits = summary.saturating_sub(SECTION_GAP + main).max(2);
+    let right = x + size.width() + wdl + REPORT_COLUMN_GAP;
+    let right_width = span - size.width() - wdl - REPORT_COLUMN_GAP;
+    let (summary, results) = if search {
+        let results = main + SUMMARY_ROWS + SECTION_GAP;
+        (
+            main,
+            Rect::new(
+                right,
+                results,
+                right_width,
+                body.bottom().saturating_sub(results + SECTION_GAP).max(2),
+            ),
+        )
+    } else {
+        let summary = body.bottom().saturating_sub(SECTION_GAP + SUMMARY_ROWS);
+        (
+            summary,
+            Rect::new(
+                right,
+                main,
+                right_width,
+                summary.saturating_sub(SECTION_GAP + main).max(2),
+            ),
+        )
+    };
 
     let mut placements = vec![
-        Placement::new(Block::PerftHeader, Rect::new(x, header, span, 1)),
+        Placement::new(Block::Header, Rect::new(x, header, span, 1)),
         Placement::new(
             Block::Board(size),
             Rect::new(x, main, size.width(), size.rows()),
         ),
-        Placement::new(Block::Splits, Rect::new(right, main, right_width, splits)),
+        Placement::new(Block::Results, results),
         Placement::new(
             Block::Summary,
-            Rect::new(right, summary, right_width, perft::SUMMARY_ROWS),
+            Rect::new(right, summary, right_width, SUMMARY_ROWS),
         ),
     ];
+
+    if search {
+        placements.push(Placement::new(
+            Block::Wdl,
+            Rect::new(
+                x + size.width() + WDL_MARGIN,
+                main,
+                search::WDL_WIDTH,
+                size.rows() - 1,
+            ),
+        ));
+    }
 
     let fen_y = main + size.rows() + FEN_GAP;
     let fen = frame.fen_rows(size.width());

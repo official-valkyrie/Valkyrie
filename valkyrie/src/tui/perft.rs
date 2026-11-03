@@ -34,60 +34,36 @@
     documentation.
 */
 
-use std::time::Duration;
-
 use crate::tui::{
-    animation,
-    canvas::{Canvas, Rect, fit},
-    palette::{BACKGROUND, ERROR, GOLD, GOLD_LIGHT, HOVER, MUTED, RULE, Rgb, STEEL, TEXT, WHITE},
-    state::{PerftRun, State, Target},
+    canvas::{Canvas, Rect},
+    palette::{ERROR, GOLD, GOLD_LIGHT, MUTED, Rgb, STEEL, TEXT, WHITE},
+    report::{self, Progress, group, speed, time},
+    state::PerftRun,
     theme::Style,
 };
 
-pub const RESULTS: &str = "results";
-pub const SUMMARY: &str = "summary";
-pub const SUMMARY_ROWS: usize = 5;
-
 const TITLE: &str = "P E R F T";
-const ANNOTATION_GAP: usize = 3;
-const COPY_FLASH: Duration = Duration::from_millis(450);
-const FLASH_STRENGTH: f32 = 0.32;
-const FACT_SEPARATOR: &str = "·";
 const MOVE_WIDTH: usize = 6;
 const MIN_NODES_WIDTH: usize = 7;
 const MIN_BRANCHING: usize = 30;
 const CELL_GAP: usize = 4;
-const COUNTER_GAP: usize = 3;
-const STATS: usize = 3;
 
 pub fn header(canvas: &mut Canvas, area: Rect, run: &PerftRun) {
-    let facts = [
-        ("depth", run.depth.to_string()),
-        ("bulk", switch(run.bulk).to_string()),
-        ("PEXT", switch(cfg!(target_feature = "bmi2")).to_string()),
-    ];
-    let mut x = canvas.put(area.x, area.y, TITLE, Style::new(GOLD).bold());
-
-    for (index, (label, value)) in facts.iter().enumerate() {
-        let separator = if index == 0 { "" } else { FACT_SEPARATOR };
-
-        x = canvas.put(x + ANNOTATION_GAP, area.y, separator, Style::new(MUTED));
-        x = canvas.put(
-            x + usize::from(index > 0) * ANNOTATION_GAP,
-            area.y,
-            label,
-            Style::new(MUTED),
-        );
-        x = canvas.put(x + 1, area.y, value, Style::new(TEXT));
-    }
+    report::header(
+        canvas,
+        area,
+        TITLE,
+        &[
+            ("depth", run.depth.to_string()),
+            ("bulk", switch(run.bulk).to_string()),
+            ("PEXT", switch(cfg!(target_feature = "bmi2")).to_string()),
+        ],
+    );
 }
 
 pub fn splits(canvas: &mut Canvas, area: Rect, run: &PerftRun, tone: Option<Rgb>) {
     let highlight = tone.is_some();
-    let background = surface(canvas, area, tone);
-
-    heading(canvas, area, "Splits", background);
-
+    let background = report::panel(canvas, area, "Splits", tone);
     let grid = Rect::new(
         area.x,
         area.y + 1,
@@ -142,88 +118,33 @@ pub fn splits(canvas: &mut Canvas, area: Rect, run: &PerftRun, tone: Option<Rgb>
 }
 
 pub fn summary(canvas: &mut Canvas, area: Rect, run: &PerftRun, tone: Option<Rgb>) {
-    let highlight = tone.is_some();
-    let background = surface(canvas, area, tone);
-    let label = Style::new(if highlight { WHITE } else { STEEL }).on(background);
-    let value = Style::new(WHITE).on(background).bold();
-
-    heading(canvas, area, "Summary", background);
-
     let done = run.splits.len();
-    let counter = format!("{done} / {}", run.moves);
-    let bar_width = area.width.saturating_sub(counter.len() + COUNTER_GAP);
-    let filled = if run.moves == 0 {
-        bar_width
-    } else {
-        done * bar_width / run.moves
-    };
-    let bar_color = match run.outcome {
-        Some(outcome) if outcome.stopped => ERROR,
-        _ => GOLD,
-    };
-
-    for column in 0..bar_width {
-        let (symbol, color) = if column < filled {
-            ('━', bar_color)
-        } else {
-            ('─', RULE)
-        };
-
-        canvas.set(
-            area.x + column,
-            area.y + 1,
-            symbol,
-            Style::new(color).on(background),
-        );
-    }
-
-    canvas.put(
-        area.x + area.width - counter.len(),
-        area.y + 1,
-        &counter,
-        Style::new(if highlight { WHITE } else { MUTED }).on(background),
-    );
-
     let elapsed = run.elapsed();
-    let stat_width = area.width / STATS;
-
-    for (index, (name, text)) in [
-        ("Nodes", group(run.nodes())),
-        ("Time", time(elapsed)),
-        ("Speed", speed(run.nodes(), elapsed)),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        let x = area.x + index * stat_width;
-
-        canvas.put(x, area.y + 3, name, label);
-        canvas.put(
-            x,
-            area.y + 4,
-            &fit(&text, stat_width.saturating_sub(1)),
-            value,
-        );
-    }
-}
-
-pub fn tones(state: &State) -> (Option<Rgb>, Option<Rgb>) {
-    let hovered = match state.hovered_target() {
-        Some(Target::Copy { label, .. }) => Some(*label),
-        _ => None,
+    let progress = Progress {
+        label: "Moves",
+        filled: if run.moves == 0 {
+            1.0
+        } else {
+            done as f32 / run.moves as f32
+        },
+        value: format!("{done} / {}", run.moves),
+        color: match run.outcome {
+            Some(outcome) if outcome.stopped => ERROR,
+            _ => GOLD,
+        },
     };
-    let flash = state.copied.as_ref().and_then(|copied| {
-        let left = 1.0 - copied.at.elapsed().as_secs_f32() / COPY_FLASH.as_secs_f32();
-        (left > 0.0).then_some((copied.label.as_str(), left))
-    });
-    let tone = |labels: &[&str]| match flash {
-        Some((label, left)) if labels.contains(&label) => {
-            Some(HOVER.lerp(GOLD, FLASH_STRENGTH * animation::smooth(left)))
-        }
-        _ if hovered.is_some_and(|label| labels.contains(&label)) => Some(HOVER),
-        _ => None,
-    };
-    (tone(&[RESULTS]), tone(&[RESULTS, SUMMARY]))
+
+    report::summary(
+        canvas,
+        area,
+        tone,
+        Some(progress),
+        &[
+            ("Nodes", group(run.nodes())),
+            ("Time", time(elapsed)),
+            ("Speed", speed(run.nodes(), elapsed)),
+        ],
+    );
 }
 
 pub fn results_text(run: &PerftRun) -> String {
@@ -248,78 +169,6 @@ pub fn summary_text(run: &PerftRun) -> String {
         time(elapsed),
         speed(run.nodes(), elapsed)
     )
-}
-
-fn surface(canvas: &mut Canvas, area: Rect, tone: Option<Rgb>) -> Rgb {
-    let Some(tone) = tone else {
-        return BACKGROUND;
-    };
-
-    canvas.fill(
-        Rect::new(
-            area.x.saturating_sub(1),
-            area.y,
-            area.width + 2,
-            area.height,
-        ),
-        Style::new(TEXT).on(tone),
-    );
-    tone
-}
-
-fn heading(canvas: &mut Canvas, area: Rect, title: &str, background: Rgb) {
-    let end = canvas.put(
-        area.x,
-        area.y,
-        title,
-        Style::new(if background == BACKGROUND {
-            GOLD
-        } else {
-            WHITE
-        })
-        .on(background)
-        .bold(),
-    );
-
-    for x in end + 1..area.x + area.width {
-        canvas.set(x, area.y, '─', Style::new(RULE).on(background));
-    }
-}
-
-pub fn group(value: u64) -> String {
-    let digits = value.to_string();
-    let mut grouped = String::new();
-
-    for (index, digit) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index).is_multiple_of(3) {
-            grouped.push(',');
-        }
-
-        grouped.push(digit);
-    }
-
-    grouped
-}
-
-fn time(elapsed: Duration) -> String {
-    let milliseconds = elapsed.as_millis();
-
-    if milliseconds < 1000 {
-        format!("{milliseconds} ms")
-    } else {
-        format!("{:.2} s", elapsed.as_secs_f64())
-    }
-}
-
-fn speed(nodes: u64, elapsed: Duration) -> String {
-    let rate = nodes as f64 / elapsed.as_secs_f64().max(0.001);
-
-    match rate {
-        rate if rate >= 1e9 => format!("{:.2} Gnps", rate / 1e9),
-        rate if rate >= 1e6 => format!("{:.1} Mnps", rate / 1e6),
-        rate if rate >= 1e3 => format!("{:.1} knps", rate / 1e3),
-        rate => format!("{rate:.0} nps"),
-    }
 }
 
 pub fn columns(width: usize, run: &PerftRun) -> usize {

@@ -35,7 +35,11 @@
 */
 
 use std::{
-    sync::{Arc, Mutex, mpsc::Sender},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+        mpsc::Sender,
+    },
     time::{Duration, Instant},
 };
 
@@ -46,10 +50,13 @@ use crate::tui::{
     completion::Catalog,
     events::Events,
     graphics::Protocol,
-    perft,
-    renderer::Renderer,
-    state::{PerftOutcome, PerftRun, Position, Screen, State, Tone, lock},
+    renderer::{FRAME_TIME, Renderer},
+    report, search,
+    state::{Applying, PerftOutcome, PerftRun, Position, Screen, SearchRun, State, Tone, lock},
 };
+
+const REPORT_CHECK_INTERVAL: u64 = 16;
+const SLOW_OPTION: Duration = Duration::from_millis(250);
 
 #[derive(Debug)]
 struct Running {
@@ -63,6 +70,7 @@ pub struct TerminalView {
     catalog: Arc<Catalog>,
     sender: Sender<String>,
     running: Mutex<Option<Running>>,
+    last_report: AtomicU64,
 }
 
 impl TerminalView {
@@ -76,11 +84,27 @@ impl TerminalView {
             catalog: Arc::new(catalog),
             sender,
             running: Mutex::new(None),
+            last_report: AtomicU64::new(0),
         }
     }
 
     fn update(&self, change: impl FnOnce(&mut State)) {
-        change(&mut lock(&self.state));
+        let mut state = lock(&self.state);
+
+        change(&mut state);
+        self.release_queue(&mut state);
+    }
+
+    fn release_queue(&self, state: &mut State) {
+        while state.applying.is_none() {
+            let Some(line) = state.queue.pop_front() else {
+                break;
+            };
+
+            state.respond(Tone::Pending, &line);
+            state.applying = Applying::parse(&line);
+            let _ = self.sender.send(line);
+        }
     }
 
     fn finish_perft(&self, nodes: u64, elapsed: Duration, stopped: bool) {
@@ -97,7 +121,7 @@ impl TerminalView {
                 stopped,
             });
 
-            let summary = format!("Perft {}: {} nodes", run.depth, perft::group(nodes));
+            let summary = format!("Perft {}: {} nodes", run.depth, report::group(nodes));
 
             if stopped {
                 state.respond(Tone::Error, &format!("{summary} before it was stopped"));
@@ -187,7 +211,27 @@ impl View for TerminalView {
     fn option_changed(&self, name: &str, value: &str) {
         self.update(|state| {
             state.options.insert(name.to_lowercase(), value.to_string());
-            state.respond(Tone::Info, &format!("{name} set to {value}"));
+
+            let finished = state
+                .applying
+                .take()
+                .filter(|applying| applying.name.eq_ignore_ascii_case(name));
+
+            match finished {
+                Some(applying) if applying.since.elapsed() >= SLOW_OPTION => state.respond(
+                    Tone::Info,
+                    &format!(
+                        "{name} set to {} in {}",
+                        applying.shown_value(),
+                        report::time(applying.since.elapsed())
+                    ),
+                ),
+                Some(applying) => state.respond(
+                    Tone::Info,
+                    &format!("{name} set to {}", applying.shown_value()),
+                ),
+                None => state.respond(Tone::Info, &format!("{name} set to {value}")),
+            }
         })
     }
 
@@ -235,19 +279,61 @@ impl View for TerminalView {
     }
 
     fn search_started(&self, _limits: &SearchLimits) {
-        self.update(|state| state.busy = true)
+        self.last_report.store(0, Ordering::Relaxed);
+        self.update(|state| {
+            state.search = Some(SearchRun::default());
+            state.screen = Screen::Search;
+            state.intro = Some(Instant::now());
+            state.busy = true;
+            state.editing = None;
+        })
     }
 
-    fn search_ended(&self, _report: &SearchReport) {
-        self.update(|state| state.busy = false)
+    fn wants_report(&self, stats: &SearchStats) -> bool {
+        if !stats.iterations().is_multiple_of(REPORT_CHECK_INTERVAL) {
+            return false;
+        }
+
+        let now = stats.elapsed_ms();
+        let due = now >= self.last_report.load(Ordering::Relaxed) + FRAME_TIME.as_millis() as u64;
+
+        if due {
+            self.last_report.store(now, Ordering::Relaxed);
+        }
+
+        due
+    }
+
+    fn report(&self, report: &SearchReport) {
+        self.update(|state| state.update_search(report))
+    }
+
+    fn search_ended(&self, report: &SearchReport) {
+        self.update(|state| state.update_search(report))
     }
 
     fn best_move(&self, mv: Option<Move>, chess960: bool) {
-        let text = mv.map_or_else(|| String::from("0000"), |mv| mv.to_string(chess960));
-
         self.update(|state| {
             state.busy = false;
-            state.respond(Tone::Result, &format!("Best move {text}"));
+
+            let Some(run) = &mut state.search else {
+                let text = mv.map_or_else(|| String::from("0000"), |mv| mv.to_string(chess960));
+                state.respond(Tone::Result, &format!("Best move {text}"));
+                return;
+            };
+
+            let best = mv.map_or_else(|| String::from("none"), |mv| run.best_san(mv));
+            let score = run
+                .lines
+                .first()
+                .map_or_else(|| "-".to_string(), |line| search::score_text(line.score));
+            let summary = format!(
+                "Best move {best} · {score} · depth {} · max depth {}",
+                run.depth, run.seldepth
+            );
+
+            run.best = Some(best);
+            state.respond(Tone::Result, &summary);
         })
     }
 }
