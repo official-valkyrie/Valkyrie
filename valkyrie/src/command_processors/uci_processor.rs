@@ -43,7 +43,6 @@ use crate::{
     command_processors::{go_args::parse_go, position_args::parse_position, print_violations},
     commands::{Category, Command, Shell},
     execution_queue::stage,
-    uci_protocol,
 };
 
 pub struct UciProcessor;
@@ -141,21 +140,29 @@ impl UciProcessor {
     }
 
     fn uci<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
-        uci_protocol::identify(env!("ENGINE_NAME"), env!("CARGO_PKG_AUTHORS"));
-        shell.engine().params().visit_options(&uci_protocol::option);
-        uci_protocol::uci_ok();
+        let view = shell.engine().view();
+
+        view.identify(env!("ENGINE_NAME"), env!("CARGO_PKG_AUTHORS"));
+        shell
+            .engine()
+            .params()
+            .visit_options(&|spec| view.option_listed(spec));
+        view.uci_ok();
     }
 
-    fn is_ready<C: EngineConfig>(_shell: &mut Shell<C>, _args: &[&str]) {
-        uci_protocol::ready_ok();
+    fn is_ready<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
+        shell.engine().view().ready_ok();
     }
 
     fn new_game<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
-        shell.engine_mut().new_game();
+        let engine = shell.engine_mut();
+
+        engine.new_game();
+        engine.view().new_game(engine.position().board());
     }
 
     fn stop<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
-        shell.engine().stop();
+        shell.stop();
     }
 
     fn quit<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {

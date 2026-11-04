@@ -46,9 +46,16 @@ static SWALLOWED: AtomicBool = AtomicBool::new(false);
 
 const SWALLOW_GRACE: Duration = Duration::from_millis(100);
 const SWALLOW_CHECK: Duration = Duration::from_millis(10);
+const INTERRUPTED_EXIT_CODE: i32 = 130;
 
 pub fn install() {
     platform::install();
+}
+
+pub fn ctrl_c() {
+    if !swallow_if_searching() {
+        std::process::exit(INTERRUPTED_EXIT_CODE);
+    }
 }
 
 pub fn set_searching(searching: bool) {
@@ -79,6 +86,7 @@ pub fn was_swallowed() -> bool {
 
 fn swallow_if_searching() -> bool {
     if !SEARCHING.load(Ordering::SeqCst) {
+        crate::tui::renderer::restore();
         return false;
     }
 
@@ -99,7 +107,12 @@ mod platform {
     }
 
     unsafe extern "system" fn handler(event: u32) -> i32 {
-        i32::from(event == CTRL_C_EVENT && super::swallow_if_searching())
+        if event == CTRL_C_EVENT {
+            i32::from(super::swallow_if_searching())
+        } else {
+            crate::tui::renderer::restore();
+            0
+        }
     }
 
     pub fn install() {
@@ -112,8 +125,9 @@ mod platform {
 
 #[cfg(unix)]
 mod platform {
+    use super::INTERRUPTED_EXIT_CODE;
+
     const SIGINT: i32 = 2;
-    const INTERRUPTED_EXIT_CODE: i32 = 130;
 
     unsafe extern "C" {
         fn signal(signum: i32, handler: usize) -> usize;

@@ -24,6 +24,7 @@ valkyrie_chess = { path = "valkyrie_chess" }
 valkyrie_engine = { path = "valkyrie_engine" }
 valkyrie_telemetry = { path = "valkyrie_telemetry" }
 valkyrie_tools = { path = "valkyrie_tools" }
+crossterm = { version = "0.29", default-features = false, features = ["events", "bracketed-paste", "windows"] }
 
 [profile.release]
 panic = "abort"

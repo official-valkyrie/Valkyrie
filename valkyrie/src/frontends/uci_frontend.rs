@@ -55,10 +55,10 @@ pub struct UciFrontend<C: EngineConfig> {
 }
 
 impl<C: EngineConfig> UciFrontend<C> {
-    pub fn new(engine: Engine<C>, registry: Registry<C>) -> Self {
+    pub fn new(engine: Engine<C>, registry: Registry<C>, input: Input) -> Self {
         Self {
             shell: Shell::new(engine, registry),
-            input: Input::spawn(),
+            input,
             exit_when_idle: false,
         }
     }
@@ -122,7 +122,7 @@ impl<C: EngineConfig> UciFrontend<C> {
             }
 
             if busy && interrupt::take_stop_request() {
-                self.shell.engine().stop();
+                self.shell.stop();
             }
 
             let line = if busy {

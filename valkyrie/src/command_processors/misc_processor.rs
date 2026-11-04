@@ -34,7 +34,13 @@
     documentation.
 */
 
-use std::{process::Command as Process, sync::Arc};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+};
 
 use valkyrie_chess::DEFAULT_PERFT_DEPTH;
 use valkyrie_engine::{
@@ -136,27 +142,40 @@ impl MiscProcessor {
     }
 
     fn perft<C: EngineConfig, const BULK: bool>(shell: &mut Shell<C>, args: &[&str]) {
-        let engine = shell.engine();
+        let engine = Arc::clone(shell.shared_engine());
 
         let depth = match parse_depth(args) {
-            Ok(depth) => depth,
+            Ok(depth) => depth.unwrap_or(DEFAULT_PERFT_DEPTH),
             Err(violations) => {
-                print_violations(engine, &violations);
+                print_violations(&engine, &violations);
                 return;
             }
         };
 
-        let depth = depth.unwrap_or(DEFAULT_PERFT_DEPTH);
         let chess960 = engine.params().general().chess960();
-        let board = engine.position().board();
+        let board = *engine.position().board();
+        let stop = Arc::new(AtomicBool::new(false));
 
-        engine.view().perft_started(board, depth, BULK);
+        let handle = {
+            let stop = Arc::clone(&stop);
 
-        let (nodes, duration) = valkyrie_chess::perft::<BULK>(board, Some(depth), |mv, nodes| {
-            engine.view().perft_move(mv, nodes, chess960)
-        });
+            thread::spawn(move || {
+                engine.view().perft_started(&board, depth, BULK);
 
-        engine.view().perft_finished(nodes, duration);
+                let (nodes, duration) =
+                    valkyrie_chess::perft_until::<BULK>(&board, Some(depth), &stop, |mv, nodes| {
+                        engine.view().perft_move(mv, nodes, chess960)
+                    });
+
+                if stop.load(Ordering::Relaxed) {
+                    engine.view().perft_stopped(nodes, duration);
+                } else {
+                    engine.view().perft_finished(nodes, duration);
+                }
+            })
+        };
+
+        shell.start_perft(handle, stop);
     }
 
     fn bench<C: EngineConfig>(shell: &mut Shell<C>, args: &[&str])
@@ -186,20 +205,7 @@ impl MiscProcessor {
         shell.start_bench(bench);
     }
 
-    fn clear_terminal_screen<C: EngineConfig>(_shell: &mut Shell<C>, _args: &[&str]) {
-        if cfg!(target_os = "windows") {
-            Process::new("cmd")
-                .args(["/c", "cls"])
-                .spawn()
-                .expect("cls command failed to start")
-                .wait()
-                .expect("failed to wait");
-        } else {
-            Process::new("clear")
-                .spawn()
-                .expect("clear command failed to start")
-                .wait()
-                .expect("failed to wait");
-        };
+    fn clear_terminal_screen<C: EngineConfig>(shell: &mut Shell<C>, _args: &[&str]) {
+        shell.engine().view().clear();
     }
 }

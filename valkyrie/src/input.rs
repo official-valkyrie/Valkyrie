@@ -83,6 +83,13 @@ impl Input {
         }
     }
 
+    pub fn from_receiver(receiver: Receiver<String>) -> Self {
+        Self {
+            receiver,
+            queue: VecDeque::new(),
+        }
+    }
+
     pub fn next(&mut self) -> Option<String> {
         self.queue.pop_front().or_else(|| self.receiver.recv().ok())
     }

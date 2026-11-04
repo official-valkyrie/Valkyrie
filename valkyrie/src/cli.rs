@@ -53,7 +53,7 @@ pub const FLAGS: &[FlagInfo] = &[
     FlagInfo {
         flag: Flag::Simple,
         name: "simple",
-        description: "Plain text output (default)",
+        description: "Plain text output (default outside a capable terminal)",
     },
     FlagInfo {
         flag: Flag::Minimal,
@@ -70,6 +70,7 @@ pub const FLAGS: &[FlagInfo] = &[
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ViewChoice {
     #[default]
+    Auto,
     Simple,
     Minimal,
 }

@@ -39,6 +39,7 @@ mod base_structures;
 mod board;
 mod move_gen;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use std::time::Instant;
 
@@ -61,9 +62,20 @@ pub use board::ChessPosition;
 pub const DEFAULT_PERFT_DEPTH: u8 = 5;
 pub const HALF_MOVE_LIMIT: u8 = 100;
 
+const STOP_CHECK_DEPTH: u8 = 3;
+
 pub fn perft<const BULK: bool>(
     board: &ChessBoard,
     depth: Option<u8>,
+    on_root_move: impl FnMut(Move, u64),
+) -> (u64, Duration) {
+    perft_until::<BULK>(board, depth, &AtomicBool::new(false), on_root_move)
+}
+
+pub fn perft_until<const BULK: bool>(
+    board: &ChessBoard,
+    depth: Option<u8>,
+    stop: &AtomicBool,
     mut on_root_move: impl FnMut(Move, u64),
 ) -> (u64, Duration) {
     let timer = Instant::now();
@@ -82,11 +94,18 @@ pub fn perft<const BULK: bool>(
     let mut node_count = 0u64;
 
     board.map_legal_moves(|mv| {
+        if stop.load(Ordering::Relaxed) {
+            return;
+        }
+
         let mut board_copy = *board;
         board_copy.make_move_with_mask(mv, &mask);
-        let result = count_child(&board_copy, depth - 1, &mask);
-        node_count += result;
-        on_root_move(mv, result);
+        let result = count_child(&board_copy, depth - 1, &mask, stop);
+
+        if !stop.load(Ordering::Relaxed) {
+            node_count += result;
+            on_root_move(mv, result);
+        }
     });
 
     (node_count, timer.elapsed())
@@ -96,6 +115,7 @@ fn perft_internal<const BULK: bool, const COLOR: u8>(
     board: &ChessBoard,
     depth: u8,
     mask: &[u8; 64],
+    stop: &AtomicBool,
 ) -> u64 {
     if depth == 0 {
         return 1;
@@ -105,15 +125,19 @@ fn perft_internal<const BULK: bool, const COLOR: u8>(
         return board.count_legal_moves_templated::<COLOR>() as u64;
     }
 
+    if depth >= STOP_CHECK_DEPTH && stop.load(Ordering::Relaxed) {
+        return 0;
+    }
+
     let mut node_count = 0u64;
 
     board.map_legal_moves_templated::<_, COLOR>(|mv| {
         let mut board_copy = *board;
         board_copy.make_move_templated::<COLOR>(mv, mask);
         node_count += if COLOR == 0 {
-            perft_internal::<BULK, 1>(&board_copy, depth - 1, mask)
+            perft_internal::<BULK, 1>(&board_copy, depth - 1, mask, stop)
         } else {
-            perft_internal::<BULK, 0>(&board_copy, depth - 1, mask)
+            perft_internal::<BULK, 0>(&board_copy, depth - 1, mask, stop)
         };
     });
 

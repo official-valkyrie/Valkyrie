@@ -34,43 +34,36 @@
     documentation.
 */
 
-use valkyrie_engine::prelude::*;
+use crate::tui::palette::{BACKGROUND, ERROR, GOLD, MUTED, Rgb, TEXT};
 
-pub fn identify(name: &str, author: &str) {
-    println!("id name {name}");
-    println!("id author {author}");
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Style {
+    pub foreground: Rgb,
+    pub background: Rgb,
+    pub bold: bool,
 }
 
-pub fn option(spec: &OptionSpec) {
-    let mut line = format!("option name {} type {}", spec.name, spec.kind.uci_name());
-
-    if spec.kind != OptionKind::Button {
-        let default = if spec.default.is_empty() {
-            "<empty>"
-        } else {
-            &spec.default
-        };
-
-        line += &format!(" default {default}");
+impl Style {
+    pub const fn new(foreground: Rgb) -> Self {
+        Self {
+            foreground,
+            background: BACKGROUND,
+            bold: false,
+        }
     }
 
-    if let Some((min, max)) = &spec.range
-        && (spec.kind == OptionKind::Spin || spec.tunable)
-    {
-        line += &format!(" min {min} max {max}");
+    pub const fn on(mut self, background: Rgb) -> Self {
+        self.background = background;
+        self
     }
 
-    for variant in spec.variants {
-        line += &format!(" var {variant}");
+    pub const fn bold(mut self) -> Self {
+        self.bold = true;
+        self
     }
-
-    println!("{line}")
 }
 
-pub fn uci_ok() {
-    println!("uciok")
-}
-
-pub fn ready_ok() {
-    println!("readyok")
-}
+pub const PLAIN: Style = Style::new(TEXT);
+pub const DIM: Style = Style::new(MUTED);
+pub const ACCENT: Style = Style::new(GOLD);
+pub const FAILURE: Style = Style::new(ERROR);
