@@ -13,7 +13,8 @@ endif
 comma := ,
 space := $(subst x,,x x)
 
-CARGO_FLAGS =
+HOST        := $(shell rustc --print host-tuple)
+CARGO_FLAGS = --target $(HOST)
 TARGET_FEATURES_BASE =
 TARGET_FEATURES =
 CPU_FLAGS   = -C target-cpu=$(TARGET_CPU)$(if $(strip $(TARGET_FEATURES_BASE) $(TARGET_FEATURES)), -C target-feature=$(subst $(space),$(comma),$(strip $(TARGET_FEATURES_BASE) $(TARGET_FEATURES))))
@@ -21,7 +22,7 @@ FEATURES    =
 DEBUG       = $(filter debug,$(MAKECMDGOALS))
 DEBUG_FLAGS = $(if $(DEBUG),--features debug --config profile.release.debug=true --config profile.release.strip=false)
 EXE         = $(BIN)
-SRC         = target/release/$(BIN)$(EXT)
+SRC         = target/$(HOST)/release/$(BIN)$(EXT)
 DEST        = $(EXE)$(EXT)
 DEST_DIR    = .
 
@@ -64,7 +65,7 @@ release-v3-nopext: TARGET_CPU = x86-64-v3
 release-v3-nopext: TARGET_FEATURES_BASE = -bmi2
 release-v3:        TARGET_CPU = x86-64-v3
 release-v4:        TARGET_CPU = x86-64-v4
-release-%:         CARGO_FLAGS = --features release
+release-%:         CARGO_FLAGS = --target $(HOST) --features release
 release-%:         override TARGET_FEATURES =
 release-%:         override FEATURES =
 release-%:         DEST_DIR = $(RELEASE_DIR)
