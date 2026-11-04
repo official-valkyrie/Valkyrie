@@ -40,8 +40,7 @@ use crate::tui::{
     canvas::{Canvas, Rect},
     graphics::WdlImage,
     palette::{
-        BACKGROUND, BALANCED, GOLD, GOLD_LIGHT, HOVER, LOSING, MUTED, Rgb, STEEL, TEXT, WHITE,
-        WINNING,
+        BACKGROUND, BALANCED, GOLD, GOLD_LIGHT, HOVER, Hsl, LOSING, MUTED, Rgb, STEEL, TEXT, WHITE, WINNING
     },
     report::{self, Progress, group, speed, time},
     state::{HistoryEntry, Region, SearchLine, SearchRun, State, Target},
@@ -64,7 +63,7 @@ const MAIN_LINE_ROWS: usize = 3;
 const MIN_HISTORY_ROWS: usize = 2;
 
 pub fn header(canvas: &mut Canvas, area: Rect, hash: String) {
-    report::header(canvas, area, TITLE, &[("hash", hash)]);
+    report::header(canvas, area, TITLE, &[("Hash", hash)]);
 }
 
 pub fn results(
@@ -406,12 +405,31 @@ fn wdl(score: ReportScore) -> [f32; 3] {
     [expected - draw / 2.0, draw, 1.0 - expected - draw / 2.0]
 }
 
-pub fn tone(expectation: f32) -> Rgb {
-    if expectation >= 0.5 {
-        BALANCED.lerp(WINNING, (expectation - 0.5) * 2.0)
-    } else {
-        LOSING.lerp(BALANCED, expectation * 2.0)
+pub fn tone(score: f32) -> Rgb {
+    let t = score.clamp(0.0, 1.0);
+
+    const EDGE_DEADZONE: f32 = 0.35;
+    const DRAW_DEADZONE: f32 = 0.0075;
+
+    if t <= EDGE_DEADZONE {
+        return LOSING;
     }
+    if t >= (1.0 - EDGE_DEADZONE) {
+        return WINNING;
+    }
+    if ((0.5 - DRAW_DEADZONE)..=(0.5 + DRAW_DEADZONE)).contains(&t) {
+        return BALANCED;
+    }
+
+    let (from, to, local) = if t < 0.5 {
+        let local = (t - EDGE_DEADZONE) / ((0.5 - DRAW_DEADZONE) - EDGE_DEADZONE);
+        (LOSING, BALANCED, local)
+    } else {
+        let local = (t - (0.5 + DRAW_DEADZONE)) / ((1.0 - EDGE_DEADZONE) - (0.5 + DRAW_DEADZONE));
+        (BALANCED, WINNING, local)
+    };
+
+    Hsl::from_rgb(from).lerp(Hsl::from_rgb(to), local.clamp(0.0, 1.0)).to_rgb()
 }
 
 pub fn hovered(state: &State) -> Option<usize> {

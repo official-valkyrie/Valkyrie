@@ -83,8 +83,8 @@ impl SimpleView {
 
 impl View for SimpleView {
     fn start(&self) {
-        println!("{}", env!("ENGINE_NAME"));
-        println!("Type \"help\" to see what it can do");
+        println!("Valykrie {}", env!("CARGO_PKG_VERSION"));
+        println!("Type \"help\" to see available commands");
     }
 
     fn message(&self, _level: MessageLevel, text: &str) {
