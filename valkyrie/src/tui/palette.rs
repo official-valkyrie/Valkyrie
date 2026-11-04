@@ -79,7 +79,11 @@ impl Hsl {
         }
 
         let d = max - min;
-        let s = if l > 0.5 { d / (2.0 - max - min) } else { d / (max + min) };
+        let s = if l > 0.5 {
+            d / (2.0 - max - min)
+        } else {
+            d / (max + min)
+        };
 
         let h = if max == r {
             (g - b) / d + if g < b { 6.0 } else { 0.0 }
@@ -98,11 +102,21 @@ impl Hsl {
         let l = self.l;
 
         let hue_to_rgb = |p: f32, q: f32, mut t: f32| -> f32 {
-            if t < 0.0 { t += 1.0; }
-            if t > 1.0 { t -= 1.0; }
-            if t < 1.0 / 6.0 { return p + (q - p) * 6.0 * t; }
-            if t < 0.5 { return q; }
-            if t < 2.0 / 3.0 { return p + (q - p) * (2.0 / 3.0 - t) * 6.0; }
+            if t < 0.0 {
+                t += 1.0;
+            }
+            if t > 1.0 {
+                t -= 1.0;
+            }
+            if t < 1.0 / 6.0 {
+                return p + (q - p) * 6.0 * t;
+            }
+            if t < 0.5 {
+                return q;
+            }
+            if t < 2.0 / 3.0 {
+                return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+            }
             p
         };
 
@@ -111,7 +125,11 @@ impl Hsl {
             return Rgb(v, v, v);
         }
 
-        let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+        let q = if l < 0.5 {
+            l * (1.0 + s)
+        } else {
+            l + s - l * s
+        };
         let p = 2.0 * l - q;
 
         let r = hue_to_rgb(p, q, h + 1.0 / 3.0);
@@ -128,8 +146,12 @@ impl Hsl {
     pub fn lerp(self, other: Hsl, t: f32) -> Hsl {
         let t = t.clamp(0.0, 1.0);
         let mut dh = other.h - self.h;
-        if dh > 180.0 { dh -= 360.0; }
-        if dh < -180.0 { dh += 360.0; }
+        if dh > 180.0 {
+            dh -= 360.0;
+        }
+        if dh < -180.0 {
+            dh += 360.0;
+        }
 
         Hsl {
             h: (self.h + dh * t).rem_euclid(360.0),

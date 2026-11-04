@@ -40,7 +40,8 @@ use crate::tui::{
     canvas::{Canvas, Rect},
     graphics::WdlImage,
     palette::{
-        BACKGROUND, BALANCED, GOLD, GOLD_LIGHT, HOVER, Hsl, LOSING, MUTED, Rgb, STEEL, TEXT, WHITE, WINNING
+        BACKGROUND, BALANCED, GOLD, GOLD_LIGHT, HOVER, Hsl, LOSING, MUTED, Rgb, STEEL, TEXT, WHITE,
+        WINNING,
     },
     report::{self, Progress, group, speed, time},
     state::{HistoryEntry, Region, SearchLine, SearchRun, State, Target},
@@ -429,7 +430,9 @@ pub fn tone(score: f32) -> Rgb {
         (BALANCED, WINNING, local)
     };
 
-    Hsl::from_rgb(from).lerp(Hsl::from_rgb(to), local.clamp(0.0, 1.0)).to_rgb()
+    Hsl::from_rgb(from)
+        .lerp(Hsl::from_rgb(to), local.clamp(0.0, 1.0))
+        .to_rgb()
 }
 
 pub fn hovered(state: &State) -> Option<usize> {
