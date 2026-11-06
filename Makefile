@@ -1,10 +1,11 @@
 BIN = valkyrie
 EXT = $(if $(filter Windows_NT,$(OS)),.exe,)
 
-HASH         = \#
-VERSION      = $(lastword $(subst @, ,$(lastword $(subst $(HASH), ,$(shell cargo pkgid -p valkyrie)))))
-RELEASE_NAME = valkyrie-$(VERSION)
-RELEASE_DIR  = releases/$(RELEASE_NAME)
+HASH            = \#
+VERSION         = $(lastword $(subst @, ,$(lastword $(subst $(HASH), ,$(shell cargo pkgid -p valkyrie)))))
+COMMIT          = $(or $(shell git log -1 --format=%cd-%h --date=format:%Y%m%d --abbrev=8),nogit)
+RELEASE_NAME    = valkyrie-$(VERSION)
+PRERELEASE_NAME = valkyrie-prerelease-$(COMMIT)
 
 comma := ,
 space := $(subst x,,x x)
@@ -35,41 +36,41 @@ else
     COPY_CMD      = cp "$(SRC)" "$(DEST)"
 endif
 
-RELEASE_TARGETS = v2 v3-nopext v3 v4
+PACKAGE_TARGETS = v2 v3-nopext v3 v4
+RELEASES        = $(addprefix release-,$(PACKAGE_TARGETS))
+PRERELEASES     = $(addprefix prerelease-,$(PACKAGE_TARGETS))
+flavors         = $(1) release-$(1) prerelease-$(1)
 
-.PHONY: default debug v2 v3 v4 native-nopext v3-nopext release $(addprefix release-,$(RELEASE_TARGETS))
+.PHONY: default debug v2 v3 v4 native-nopext v3-nopext release prerelease $(RELEASES) $(PRERELEASES)
 .NOTPARALLEL:
 
 debug: $(if $(filter-out debug,$(MAKECMDGOALS)),,default) ;
 
-default: TARGET_CPU = native
-v2:      TARGET_CPU = x86-64-v2
-v3:      TARGET_CPU = x86-64-v3
-v4:      TARGET_CPU = x86-64-v4
-
-native-nopext: TARGET_CPU = native
-native-nopext: TARGET_FEATURES_BASE = -bmi2
-v3-nopext:     TARGET_CPU = x86-64-v3
-v3-nopext:     TARGET_FEATURES_BASE = -bmi2
+default:                   TARGET_CPU = native
+native-nopext:             TARGET_CPU = native
+native-nopext:             TARGET_FEATURES_BASE = -bmi2
+$(call flavors,v2):        TARGET_CPU = x86-64-v2
+$(call flavors,v3-nopext): TARGET_CPU = x86-64-v3
+$(call flavors,v3-nopext): TARGET_FEATURES_BASE = -bmi2
+$(call flavors,v3):        TARGET_CPU = x86-64-v3
+$(call flavors,v4):        TARGET_CPU = x86-64-v4
 
 default v2 v3 v4 native-nopext v3-nopext:
 	$(SET_RUSTFLAGS) cargo build --release $(CARGO_FLAGS) $(DEBUG_FLAGS) $(if $(FEATURES),--features $(FEATURES)) -p valkyrie --bin $(BIN)
 	$(COPY_CMD)
 
-release-v2:        TARGET_CPU = x86-64-v2
-release-v3-nopext: TARGET_CPU = x86-64-v3
-release-v3-nopext: TARGET_FEATURES_BASE = -bmi2
-release-v3:        TARGET_CPU = x86-64-v3
-release-v4:        TARGET_CPU = x86-64-v4
-release-%:         CARGO_FLAGS = --target $(HOST) --features release
-release-%:         override TARGET_FEATURES =
-release-%:         override FEATURES =
-release-%:         DEST_DIR = $(RELEASE_DIR)
-release-%:         DEST = $(RELEASE_DIR)/$(RELEASE_NAME)-$(PLATFORM)-x86-64-$(patsubst release-%,%,$@)$(EXT)
+$(RELEASES):                PACKAGE = $(RELEASE_NAME)
+$(RELEASES):                PACKAGE_FEATURES = release
+$(PRERELEASES):             PACKAGE = $(PRERELEASE_NAME)
+$(PRERELEASES):             PACKAGE_FEATURES = prerelease
+$(RELEASES) $(PRERELEASES): override TARGET_FEATURES =
+$(RELEASES) $(PRERELEASES): DEST_DIR = releases/$(PACKAGE)
+$(RELEASES) $(PRERELEASES): DEST = $(DEST_DIR)/$(PACKAGE)-$(PLATFORM)-x86-64-$(patsubst prerelease-%,%,$(patsubst release-%,%,$@))$(EXT)
 
-release: $(addprefix release-,$(RELEASE_TARGETS))
+release:    $(RELEASES)
+prerelease: $(PRERELEASES)
 
-$(addprefix release-,$(RELEASE_TARGETS)):
+$(RELEASES) $(PRERELEASES):
 	$(MKDIR_CMD)
-	$(SET_RUSTFLAGS) cargo build --release $(CARGO_FLAGS) -p valkyrie --bin $(BIN)
+	$(SET_RUSTFLAGS) cargo build --release $(CARGO_FLAGS) --features $(PACKAGE_FEATURES) -p valkyrie --bin $(BIN)
 	$(COPY_CMD)

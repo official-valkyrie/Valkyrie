@@ -50,7 +50,6 @@ jobs:
   build:
     name: build (${{ matrix.os }}, ${{ matrix.target }})
     needs: meta
-    if: github.event.action != 'edited' || github.event.changes.body
     strategy:
       fail-fast: false
       matrix:
@@ -73,17 +72,7 @@ jobs:
       - if: runner.os == 'Windows'
         run: command -v make || choco install make -y --no-progress
 
-      - run: |
-          if [ "${{ needs.meta.outputs.release }}" = true ]; then
-            make release-${{ matrix.target }}
-          else
-            make ${{ matrix.target }} FEATURES=prerelease
-            ext=$([ "$RUNNER_OS" = Windows ] && echo .exe || true)
-            name=$(./valkyrie$ext version | tail -n 1 | tr -d '\r' | tr A-Z a-z)
-            platform=$(tr A-Z a-z <<< "$RUNNER_OS")
-            mkdir -p "releases/$name"
-            mv "valkyrie$ext" "releases/$name/$name-$platform-x86-64-${{ matrix.target }}$ext"
-          fi
+      - run: make ${{ needs.meta.outputs.release == 'true' && 'release' || 'prerelease' }}-${{ matrix.target }}
 
       - uses: actions/upload-artifact@v4
         with:

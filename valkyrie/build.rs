@@ -41,7 +41,7 @@ fn main() {
 
     if cfg!(feature = "release") && !cfg!(feature = "prerelease") {
         println!(
-            "cargo:rustc-env=ENGINE_NAME=Valkyrie v{}",
+            "cargo:rustc-env=ENGINE_NAME=Valkyrie {}",
             env!("CARGO_PKG_VERSION")
         );
         return;
