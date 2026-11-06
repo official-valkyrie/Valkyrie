@@ -21,3 +21,4 @@ crossterm = { workspace = true }
 [features]
 debug = ["valkyrie_engine/debug"]
 release = ["valkyrie_engine/release"]
+prerelease = ["release"]
