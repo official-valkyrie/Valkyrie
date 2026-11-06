@@ -189,8 +189,11 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      NODES: ${{ needs.node-count.outputs.nodes }}
     steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
       - uses: actions/download-artifact@v4
         with:
           pattern: binary-*
@@ -200,6 +203,26 @@ jobs:
       - run: |
           repo="${{ github.repository }}"
           name=$(ls dist)
+
+          latest=$(git tag | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)
+          if [ -n "$latest" ]; then
+            range="$latest..HEAD"
+            heading="Commits since $latest"
+          else
+            range=HEAD
+            heading="Commits"
+          fi
+
+          {
+            echo '> [!WARNING]'
+            echo '> This is an automatic prerelease built from the latest commit on `main`. It is **not an official release** and may have stability issues.'
+            echo '>'
+            echo "> For a stable build, use the [latest official release](https://github.com/$repo/releases/latest)."
+            echo
+            echo "## $heading"
+            echo
+            git log "$range" --abbrev=8 --format="- [\`%h\`](https://github.com/$repo/commit/%H) %s"
+          } > notes.md
 
           if gh release view prerelease --repo "$repo" > /dev/null 2>&1; then
             gh release delete prerelease --repo "$repo" --yes
@@ -212,7 +235,7 @@ jobs:
             --repo "$repo" \
             --target "${{ github.sha }}" \
             --title "Valkyrie ${name#valkyrie-}" \
-            --notes "Bench: $NODES" \
+            --notes-file notes.md \
             --prerelease
 
           tag_sha=$(gh api "repos/$repo/git/ref/tags/prerelease" --jq .object.sha)
