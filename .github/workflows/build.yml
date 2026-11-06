@@ -77,8 +77,12 @@ jobs:
           if [ "${{ needs.meta.outputs.release }}" = true ]; then
             make release-${{ matrix.target }}
           else
-            name="valkyrie-prerelease-$(git log -1 --format=%cd-%h --date=format:%Y%m%d --abbrev=8)"
-            make release-${{ matrix.target }} EXE="$name" ENGINE_NAME="$name"
+            make ${{ matrix.target }} FEATURES=prerelease
+            ext=$([ "$RUNNER_OS" = Windows ] && echo .exe || true)
+            name=$(./valkyrie$ext version | tail -n 1 | tr -d '\r' | tr A-Z a-z)
+            platform=$(tr A-Z a-z <<< "$RUNNER_OS")
+            mkdir -p "releases/$name"
+            mv "valkyrie$ext" "releases/$name/$name-$platform-x86-64-${{ matrix.target }}$ext"
           fi
 
       - uses: actions/upload-artifact@v4
@@ -207,7 +211,7 @@ jobs:
           gh release create prerelease dist/"$name"/* \
             --repo "$repo" \
             --target "${{ github.sha }}" \
-            --title "$name" \
+            --title "Valkyrie ${name#valkyrie-}" \
             --notes "Bench: $NODES" \
             --prerelease
 
@@ -269,7 +273,7 @@ jobs:
           gh release create "$VERSION" dist/*/* \
             --repo "$repo" \
             --target "$sha" \
-            --title "Valkyrie v$VERSION" \
+            --title "Valkyrie $VERSION" \
             --draft \
             "${notes[@]}"
 

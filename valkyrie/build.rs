@@ -34,9 +34,18 @@
     documentation.
 */
 
-#[cfg(not(feature = "release"))]
+use std::process::Command;
+
 fn main() {
-    use std::process::Command;
+    println!("cargo:rerun-if-changed=build.rs");
+
+    if cfg!(feature = "release") && !cfg!(feature = "prerelease") {
+        println!(
+            "cargo:rustc-env=ENGINE_NAME=Valkyrie v{}",
+            env!("CARGO_PKG_VERSION")
+        );
+        return;
+    }
 
     let git = |args: &[&str]| {
         Command::new("git")
@@ -57,22 +66,15 @@ fn main() {
     ])
     .unwrap_or_else(|| "nogit".to_owned());
 
-    println!("cargo:rustc-env=ENGINE_NAME=Valkyrie-dev-{commit}");
+    let kind = if cfg!(feature = "prerelease") {
+        "prerelease"
+    } else {
+        "dev"
+    };
 
-    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rustc-env=ENGINE_NAME=Valkyrie-{kind}-{commit}");
 
     if let Some(head_log) = git(&["rev-parse", "--git-path", "logs/HEAD"]) {
         println!("cargo:rerun-if-changed={head_log}");
     }
-}
-
-#[cfg(feature = "release")]
-fn main() {
-    let formatted_name = std::env::var("ENGINE_NAME")
-        .unwrap_or_else(|_| format!("Valkyrie v{}", env!("CARGO_PKG_VERSION")));
-
-    println!("cargo:rustc-env=ENGINE_NAME={formatted_name}");
-
-    println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-env-changed=ENGINE_NAME");
 }

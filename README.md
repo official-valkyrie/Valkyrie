@@ -41,7 +41,7 @@ If you want a binary that runs on other machines too, you can compile for one of
 | `make v3-nopext` | x86-64-v3 without PEXT instruction, for AMD Zen 1 and Zen 2 CPUs, where PEXT is very slow |
 | `make v4` | x86-64-v4 |
 
-There is also `make release`, which compiles all four levels from the table one after another and puts them in the `releases` folder, with names like `Valkyrie-v0.1.0-windows-v3.exe`. Those are the same binaries that are uploaded on the releases page. They are called by the version of the engine and have all internal tuning parameters locked in, so the only options they show are the ones that are meant for the user.
+There is also `make release`, which compiles all four levels from the table one after another and puts them in the `releases` folder, with names like `valkyrie-0.1.0-windows-x86-64-v3.exe`. Those are the same binaries that are uploaded on the releases page. They are called by the version of the engine and have all internal tuning parameters locked in, so the only options they show are the ones that are meant for the user.
 
 ## Usage
 Valkyrie uses the [Universal Chess Interface (UCI)](https://en.wikipedia.org/wiki/Universal_Chess_Interface) protocol. UCI is the standard language that chess programs use to talk with chess engines. Thanks to that you don't need anything special to play against Valkyrie or use it for analysis, you can just add it as an engine in any chess GUI that supports UCI, like [Cute Chess](https://cutechess.com), [En Croissant](https://encroissant.org) or [Arena](http://www.playwitharena.de).

@@ -3,12 +3,8 @@ EXT = $(if $(filter Windows_NT,$(OS)),.exe,)
 
 HASH         = \#
 VERSION      = $(lastword $(subst @, ,$(lastword $(subst $(HASH), ,$(shell cargo pkgid -p valkyrie)))))
-RELEASE_NAME = Valkyrie-v$(VERSION)
+RELEASE_NAME = valkyrie-$(VERSION)
 RELEASE_DIR  = releases/$(RELEASE_NAME)
-
-ifeq ($(origin EXE),command line)
-    RELEASE_NAME = $(EXE)
-endif
 
 comma := ,
 space := $(subst x,,x x)
@@ -69,7 +65,7 @@ release-%:         CARGO_FLAGS = --target $(HOST) --features release
 release-%:         override TARGET_FEATURES =
 release-%:         override FEATURES =
 release-%:         DEST_DIR = $(RELEASE_DIR)
-release-%:         DEST = $(RELEASE_DIR)/$(RELEASE_NAME)-$(PLATFORM)-$(patsubst release-%,%,$@)$(EXT)
+release-%:         DEST = $(RELEASE_DIR)/$(RELEASE_NAME)-$(PLATFORM)-x86-64-$(patsubst release-%,%,$@)$(EXT)
 
 release: $(addprefix release-,$(RELEASE_TARGETS))
 
